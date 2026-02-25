@@ -2,17 +2,13 @@ package table
 
 import (
 	"maps"
-	"regexp"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-)
 
-// stripANSI removes ANSI escape sequences for assertion on plain text content.
-func stripANSI(s string) string {
-	return regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(s, "")
-}
+	"github.com/jxdones/stoat/internal/ui/testutil"
+)
 
 // keyMsg creates a tea.KeyMsg for testing. Supports: "up", "down", "left", "right", "home", "end", "g", "G", "k", "j", "h", "l".
 func keyMsg(s string) tea.KeyMsg {
@@ -387,7 +383,7 @@ func Test_padOrTrim(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := padOrTrim(tt.s, tt.width, style)
-			gotPlain := stripANSI(got)
+			gotPlain := testutil.StripANSI(got)
 			if gotPlain != tt.expect {
 				t.Errorf("padOrTrim(%q, %d) plain = %q, want %q", tt.s, tt.width, gotPlain, tt.expect)
 			}

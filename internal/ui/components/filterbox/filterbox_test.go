@@ -1,4 +1,4 @@
-package querybox
+package filterbox
 
 import (
 	"regexp"
@@ -20,48 +20,13 @@ func TestNew(t *testing.T) {
 		t.Error("New() View() is empty")
 	}
 	plain := testutil.StripANSI(view)
-	if plain != "" && regexp.MustCompile(`sql>\s*`).FindString(plain) == "" {
-		if regexp.MustCompile("Enter your query").FindString(plain) == "" {
-			t.Logf("View (plain): %q", plain)
-		}
+	if regexp.MustCompile("Filter:").FindString(plain) == "" &&
+		regexp.MustCompile("filter table rows").FindString(plain) == "" {
+		t.Logf("View (plain): %q", plain)
 	}
 }
 
-func TestSetSize_clamps_dimensions(t *testing.T) {
-	tests := []struct {
-		name   string
-		width  int
-		height int
-	}{
-		{
-			name:   "small_clamped_to_min",
-			width:  10,
-			height: 1,
-		},
-		{
-			name:   "large_no_panic",
-			width:  200,
-			height: 50,
-		},
-		{
-			name:   "exact_min",
-			width:  24,
-			height: 3,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := New()
-			m.SetSize(tt.width, tt.height)
-			view := m.View()
-			if view == "" {
-				t.Errorf("View() after SetSize(%d,%d) is empty", tt.width, tt.height)
-			}
-		})
-	}
-}
-
-func TestFocus_Blur_SetFocused(t *testing.T) {
+func TestFocus_Blur(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(*Model)
@@ -73,10 +38,6 @@ func TestFocus_Blur_SetFocused(t *testing.T) {
 		{
 			name: "after_blur",
 			run:  func(m *Model) { m.Blur() },
-		},
-		{
-			name: "after_setFocused_true",
-			run:  func(m *Model) { m.SetFocused(true) },
 		},
 	}
 	for _, tt := range tests {
@@ -94,22 +55,22 @@ func TestFocus_Blur_SetFocused(t *testing.T) {
 func TestValue_SetValue(t *testing.T) {
 	tests := []struct {
 		name      string
-		setValues []string // applied in order; empty slice = no SetValue calls
+		setValues []string
 		wantValue string
 	}{
-		{
-			name:      "initial_empty",
+		{ 
+			name: "initial_empty",
 			setValues: nil,
 			wantValue: "",
 		},
 		{
-			name:      "set_SELECT_1",
-			setValues: []string{"SELECT 1"},
-			wantValue: "SELECT 1",
+			name: "set_filter_text",
+			setValues: []string{"NLD"},
+			wantValue: "NLD",
 		},
 		{
-			name:      "set_empty_clears",
-			setValues: []string{"SELECT 1", ""},
+			name: "set_empty_clears",
+			setValues: []string{"Dutch", ""},
 			wantValue: "",
 		},
 	}
@@ -138,29 +99,26 @@ func TestUpdate(t *testing.T) {
 		wantValue string
 	}{
 		{
-			name: "typing_updates_value",
-			setup: func(m *Model) {
-				m.Focus()
-				m.SetSize(40, 5)
-			},
+			name:  "typing_updates_value",
+			setup: func(m *Model) { m.Focus() },
 			runUpdate: func(m Model) (Model, tea.Cmd) {
 				var cmd tea.Cmd
-				for _, r := range "hi" {
+				for _, r := range "NLD" {
 					m, cmd = m.Update(testutil.KeyRune(r))
 				}
 				return m, cmd
 			},
-			wantValue: "hi",
+			wantValue: "NLD",
 		},
 		{
 			name: "window_size_preserves_value",
 			setup: func(m *Model) {
-				m.SetValue("SELECT * FROM t")
+				m.SetValue("Dutch")
 			},
 			runUpdate: func(m Model) (Model, tea.Cmd) {
 				return m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 			},
-			wantValue: "SELECT * FROM t",
+			wantValue: "Dutch",
 		},
 	}
 	for _, tt := range tests {
@@ -181,17 +139,17 @@ func TestView(t *testing.T) {
 	tests := []struct {
 		name         string
 		setValue     string
-		wantContains string // substring or pattern to find in plain view (after stripANSI)
+		wantContains string
 	}{
-		{
-			name:         "empty_shows_prompt_or_placeholder",
-			setValue:     "",
-			wantContains: "sql>",
+		{ 
+			name: "empty_shows_prompt_or_placeholder",
+			setValue: "",
+			wantContains: "Filter:",
 		},
 		{
-			name:         "with_value_shows_content",
-			setValue:     "SELECT 1",
-			wantContains: "SELECT 1",
+			name: "with_value_shows_content",
+			setValue: "NLD",
+			wantContains: "NLD",
 		},
 	}
 	for _, tt := range tests {
@@ -200,7 +158,6 @@ func TestView(t *testing.T) {
 			if tt.setValue != "" {
 				m.SetValue(tt.setValue)
 			}
-			m.SetSize(40, 3)
 			view := m.View()
 			if view == "" {
 				t.Fatal("View() is empty")
@@ -210,8 +167,7 @@ func TestView(t *testing.T) {
 				t.Fatal("View() has no plain text after stripping ANSI")
 			}
 			if regexp.MustCompile(regexp.QuoteMeta(tt.wantContains)).FindString(plain) == "" {
-				// Fallback: empty case may show placeholder instead of prompt
-				if tt.setValue == "" && regexp.MustCompile("Enter your query").FindString(plain) == "" {
+				if tt.setValue == "" && regexp.MustCompile("filter table rows").FindString(plain) == "" {
 					t.Errorf("View() plain should contain %q or placeholder; got: %q", tt.wantContains, plain)
 				} else if tt.setValue != "" {
 					t.Errorf("View() plain should contain %q; got: %q", tt.wantContains, plain)
@@ -228,9 +184,9 @@ func TestHelpBindings(t *testing.T) {
 		wantHelp string
 	}{
 		{
-			name:     "run_query_binding",
-			wantKey:  "ctrl+s",
-			wantHelp: "run query",
+			name: "apply_filter_binding",
+			wantKey: "enter",
+			wantHelp: "apply filter",
 		},
 	}
 	for _, tt := range tests {
