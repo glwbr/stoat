@@ -10,6 +10,8 @@ type KeyMap struct {
 	MoveRight  key.Binding
 	GotoTop    key.Binding
 	GotoBottom key.Binding
+
+	Enter key.Binding
 }
 
 // DefaultKeyMap returns the default navigation keymap.
@@ -21,6 +23,7 @@ func DefaultKeyMap() KeyMap {
 		MoveRight:  key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("right/l", "move right")),
 		GotoTop:    key.NewBinding(key.WithKeys("home", "g"), key.WithHelp("g/home", "go to top")),
 		GotoBottom: key.NewBinding(key.WithKeys("end", "G"), key.WithHelp("G/end", "go to bottom")),
+		Enter:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 	}
 }
 
