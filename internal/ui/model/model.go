@@ -72,7 +72,7 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) applyViewState() {
 	frame := computeLayout(m.view.width, m.view.height)
 
-	m.view.compact = m.view.width < 42 || m.view.height < 14
+	m.view.compact = m.view.width < 80 || m.view.height < 24
 	if m.view.compact || frame.rows.mainContent <= 0 {
 		return
 	}

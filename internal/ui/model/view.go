@@ -20,12 +20,23 @@ const (
 	maxTableShrinkPasses    = 8
 	minRenderWidth          = 1
 
+	minTerminalWidth   = 80
+	minTerminalHeight  = 24
+	minPaneInnerHeight = 1
+
 	noDataSourcePlaceholder = "No data source connected.\n\nPress 'q' to exit"
 )
 
 // View renders the UI layout.
 func (m Model) View() tea.View {
 	m.applyViewState()
+	if m.view.compact {
+		full := normalizeCanvas(m.compactView(), m.view.width, m.view.height)
+		v := tea.NewView(full)
+		v.AltScreen = true
+		return v
+	}
+
 	frame := computeLayout(m.view.width, m.view.height)
 
 	base := normalizeCanvas(m.renderBase(frame), m.view.width, frame.rows.mainContent)
@@ -216,6 +227,24 @@ func normalizeCanvas(content string, width, height int) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// compactView renders the compact view of the UI layout.
+func (m Model) compactView() string {
+	// No status bar in compact view; only message area + options row.
+	contentH := max(minPaneInnerHeight, m.view.height-1)
+	title := lipgloss.NewStyle().Foreground(theme.Current.TextWarning).Bold(true).Render("Terminal too small")
+	body := []string{
+		title,
+		"",
+		fmt.Sprintf("Current: %dx%d", m.view.width, m.view.height),
+		fmt.Sprintf("Minimum: %dx%d", minTerminalWidth, minTerminalHeight),
+		"",
+		"Resize the terminal to continue using the full UI.",
+		"Keys: Ctrl+R reload data, q quit.",
+	}
+	msg := normalizeCanvas(strings.Join(body, "\n"), m.view.width, contentH)
+	return normalizeCanvas(lipgloss.JoinVertical(lipgloss.Left, msg, m.renderOptions()), m.view.width, m.view.height)
 }
 
 // statusBindings returns the key bindings for the status area.

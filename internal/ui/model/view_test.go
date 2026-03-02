@@ -23,10 +23,10 @@ func TestView(t *testing.T) {
 			altScreen:    true,
 		},
 		{
-			name:         "small_height_includes_status_and_options",
+			name:         "small_height_shows_compact_resize_message",
 			width:        80,
 			height:       10,
-			wantContains: []string{"No connection", " Ready", "q"},
+			wantContains: []string{"Terminal too small", "Minimum: 80x24", "Resize the terminal", "q"},
 			altScreen:    true,
 		},
 		{

@@ -16,3 +16,5 @@ vendor
 # Database files
 *.db
 *.sqlite
+
+stoat
