@@ -225,7 +225,7 @@ func HelpBindings() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(
 			key.WithKeys("up", "down", "j", "k"),
-			key.WithHelp("j/k", "navigate (up at top → databases)"),
+			key.WithHelp("j/k", "navigate"),
 		),
 		key.NewBinding(
 			key.WithKeys("g", "home", "G", "end"),
@@ -318,7 +318,8 @@ func (m Model) databaseLines(contentWidth int) []string {
 		if i == m.selectedDB {
 			style = lipgloss.NewStyle().Foreground(theme.Current.TextHeader).Background(theme.Current.BorderFocused).Bold(true)
 		}
-		out = append(out, style.Render(fit(db, contentWidth)))
+		label := "  " + db
+		out = append(out, style.Render(fit(label, contentWidth)))
 	}
 	return out
 }
@@ -337,7 +338,7 @@ func (m Model) tableLines(contentWidth int) []string {
 			style = lipgloss.NewStyle().Foreground(theme.Current.TextHeader).Background(theme.Current.TextAccent).Bold(true)
 		}
 
-		label := " " + table
+		label := "  " + table
 		if strings.HasPrefix(table, "(") && strings.HasSuffix(table, ")") {
 			label = table
 		}
@@ -469,6 +470,14 @@ func (m Model) ActiveDB() string {
 		return ""
 	}
 	return m.databases[m.openedDB]
+}
+
+// EffectiveDB returns the database to use for loading (ActiveDB if set, else SelectedDB).
+func (m Model) EffectiveDB() string {
+	if db := m.ActiveDB(); db != "" {
+		return db
+	}
+	return m.SelectedDB()
 }
 
 // ActiveSection returns the currently active section.

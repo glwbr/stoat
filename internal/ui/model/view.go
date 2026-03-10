@@ -11,7 +11,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jxdones/stoat/internal/ui/common"
+	"github.com/jxdones/stoat/internal/ui/components/filterbox"
+	"github.com/jxdones/stoat/internal/ui/components/querybox"
 	"github.com/jxdones/stoat/internal/ui/components/shortcuts"
+	"github.com/jxdones/stoat/internal/ui/components/sidebar"
+	"github.com/jxdones/stoat/internal/ui/components/table"
 	"github.com/jxdones/stoat/internal/ui/theme"
 )
 
@@ -24,7 +28,8 @@ const (
 	minTerminalHeight  = 24
 	minPaneInnerHeight = 1
 
-	noDataSourcePlaceholder = "No data source connected.\n\nPress 'q' to exit"
+	noDataSourcePlaceholder = "No data source connected.\n\nPress Esc then q to exit, or Ctrl+C"
+	selectTablePlaceholder  = "Select a table from the sidebar and press Enter to view data."
 )
 
 // View renders the UI layout.
@@ -109,10 +114,7 @@ func (m Model) renderBase(frame layout) string {
 
 // renderHeader renders the header area of the UI layout.
 func (m Model) renderHeader(width int) string {
-	db := m.sidebar.ActiveDB()
-	if db == "" {
-		db = m.sidebar.SelectedDB()
-	}
+	db := m.sidebar.EffectiveDB()
 	table := m.sidebar.SelectedTable()
 
 	target := "No connection"
@@ -134,7 +136,16 @@ func (m Model) renderHeader(width int) string {
 	if rowsShown == 1 {
 		rowsWord = "row"
 	}
-	showing := fmt.Sprintf("page %d | %d %s", 1, rowsShown, rowsWord)
+	pageNum := len(m.paging.afterStack)
+	pageNotLoaded := pageNum == 1 && strings.TrimSpace(m.paging.afterStack[0]) == "" &&
+		m.table.ColumnCount() == 0 &&
+		m.table.RowCount() == 0
+
+	if pageNotLoaded {
+		pageNum = 0
+	}
+
+	showing := fmt.Sprintf("page %d | %d %s", pageNum, rowsShown, rowsWord)
 
 	line2 := lipgloss.NewStyle().Foreground(theme.Current.TextHeader).Render(
 		"columns: " + strconv.Itoa(m.table.ColumnCount()) + ", visible: " + strconv.Itoa(m.table.VisibleColumnCount()) + " | " + showing,
@@ -145,11 +156,16 @@ func (m Model) renderHeader(width int) string {
 }
 
 // renderTable renders the table area with an outer pane border.
-// When there is no table data, it shows a placeholder message instead of an empty table.
+// When there is no table data, it shows a placeholder: "No data source connected"
+// when disconnected, or "Select a table..." when connected but no table opened yet.
 func (m Model) renderTable(width, height int) string {
 	content := m.table.View().Content
 	if m.table.ColumnCount() == 0 && m.table.RowCount() == 0 {
-		content = lipgloss.NewStyle().Foreground(theme.Current.TextMuted).Render(noDataSourcePlaceholder)
+		msg := noDataSourcePlaceholder
+		if m.HasConnection() {
+			msg = selectTablePlaceholder
+		}
+		content = lipgloss.NewStyle().Foreground(theme.Current.TextMuted).Render(msg)
 	}
 	return common.BorderedPane(width, height, m.isFocused(FocusTable), common.FocusBorder(m.isFocused(FocusTable))).
 		Render(content)
@@ -187,10 +203,10 @@ func (m Model) renderStatus() string {
 
 // renderOptions renders the options area of the UI layout.
 func (m Model) renderOptions() string {
-	innerWidth := max(minRenderWidth, m.view.width-2)
-	content := shortcuts.RenderShortcuts(innerWidth, m.statusBindings())
+	outerWidth := max(minRenderWidth, m.view.width)
+	content := shortcuts.RenderShortcuts(outerWidth, m.statusBindings())
 	helpLine := lipgloss.NewStyle().
-		Width(innerWidth).
+		Width(outerWidth).
 		BorderTop(true).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(theme.Current.DividerBorder).
@@ -241,7 +257,7 @@ func (m Model) compactView() string {
 		fmt.Sprintf("Minimum: %dx%d", minTerminalWidth, minTerminalHeight),
 		"",
 		"Resize the terminal to continue using the full UI.",
-		"Keys: Ctrl+R reload data, q quit.",
+		"Keys: q quit, Tab cycle focus, Esc clear focus.",
 	}
 	msg := normalizeCanvas(strings.Join(body, "\n"), m.view.width, contentH)
 	return normalizeCanvas(lipgloss.JoinVertical(lipgloss.Left, msg, m.renderOptions()), m.view.width, m.view.height)
@@ -249,11 +265,7 @@ func (m Model) compactView() string {
 
 // statusBindings returns the key bindings for the status area.
 func (m Model) statusBindings() []key.Binding {
-	return []key.Binding{
-		key.NewBinding(
-			key.WithKeys("q"),
-			key.WithHelp("q", "quit"),
-		),
+	globalBindings := []key.Binding{
 		key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "focus panes"),
@@ -262,5 +274,28 @@ func (m Model) statusBindings() []key.Binding {
 			key.WithKeys("shift+tab"),
 			key.WithHelp("shift+tab", "focus previous pane"),
 		),
+		key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "clear focus"),
+		),
 	}
+	if m.view.focus == FocusNone {
+		return append(globalBindings, key.NewBinding(
+			key.WithKeys("q"),
+			key.WithHelp("q", "quit"),
+		))
+	}
+
+	var paneBindings []key.Binding
+	switch m.view.focus {
+	case FocusSidebar:
+		paneBindings = sidebar.HelpBindings()
+	case FocusFilterbox:
+		paneBindings = filterbox.HelpBindings()
+	case FocusTable:
+		paneBindings = table.HelpBindings()
+	case FocusQuerybox:
+		paneBindings = querybox.HelpBindings()
+	}
+	return append(paneBindings, globalBindings...)
 }

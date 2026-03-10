@@ -37,9 +37,10 @@ func BorderedPane(width, height int, focused bool, borderColor color.Color) lipg
 }
 
 // DividerTopRow returns a style for a divider top row with the given width and border color.
+// Uses the same width clamping as BorderedBox so the divider aligns with other panes.
 func DividerTopRow(width int, borderColor color.Color) lipgloss.Style {
 	return lipgloss.NewStyle().
-		Width(width).
+		Width(ClampMin(width, minDimension)).
 		BorderTop(true).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(borderColor).

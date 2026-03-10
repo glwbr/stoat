@@ -19,8 +19,8 @@ func TestNew(t *testing.T) {
 		t.Error("New() View() is empty")
 	}
 	plain := testutil.StripANSI(view.Content)
-	if regexp.MustCompile("Sections:").FindString(plain) == "" {
-		t.Errorf("View() should contain \"Sections:\"; plain: %q", plain)
+	if regexp.MustCompile("1:Results").FindString(plain) == "" {
+		t.Errorf("View() should contain tab content; plain: %q", plain)
 	}
 }
 
@@ -186,8 +186,8 @@ func TestApplyViewState(t *testing.T) {
 		t.Error("View() after ApplyViewState is empty")
 	}
 	plain := testutil.StripANSI(view.Content)
-	if regexp.MustCompile("Sections:").FindString(plain) == "" {
-		t.Errorf("View() should contain \"Sections:\"; plain: %q", plain)
+	if regexp.MustCompile("1:A").FindString(plain) == "" {
+		t.Errorf("View() should contain tab content; plain: %q", plain)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestView(t *testing.T) {
 			tabs:         []string{"Results", "Schema"},
 			activeIdx:    0,
 			setWidth:     50,
-			wantContains: "Sections:",
+			wantContains: "1:Results",
 		},
 		{
 			name:         "two_tabs_second_active",
@@ -229,7 +229,7 @@ func TestView(t *testing.T) {
 			tabs:         []string{},
 			activeIdx:    0,
 			setWidth:     40,
-			wantContains: "Sections:",
+			wantContains: "│", // bordered box when no tabs
 		},
 	}
 	for _, tt := range tests {

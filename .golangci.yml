@@ -1,3 +1,18 @@
 version: "2"
 run:
   go: '1.25.5'
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - "(*database/sql.Rows).Close"
+        - "(*database/sql.DB).Close"
+        - "(*database/sql.Conn).Close"
+        - "(*sqlite.connection).Close"
+  exclusions:
+    rules:
+      - linters:
+          - errcheck
+        path: 'cmd/stoat/main\.go'
+        text: 'conn\.Close'

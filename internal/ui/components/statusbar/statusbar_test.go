@@ -3,6 +3,7 @@ package statusbar
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNew(t *testing.T) {
@@ -77,6 +78,65 @@ func TestSetStatus(t *testing.T) {
 			}
 			if tt.wantContains != "" && !strings.Contains(view.Content, tt.wantContains) {
 				t.Errorf("View(80).Content should contain %q; got %q", tt.wantContains, view.Content)
+			}
+		})
+	}
+}
+
+func TestSetStatusWithTTLReturnsExpirationCmd(t *testing.T) {
+	m := New()
+	cmd := m.SetStatusWithTTL("Done", Success, time.Millisecond)
+	if cmd == nil {
+		t.Fatal("expected non-nil expiration cmd")
+	}
+	msg := cmd()
+	expired, ok := msg.(ExpiredMsg)
+	if !ok {
+		t.Fatalf("expected ExpiredMsg, got %T", msg)
+	}
+	if expired.Seq != m.seq {
+		t.Fatalf("expected expiration seq %d, got %d", m.seq, expired.Seq)
+	}
+}
+
+func TestHandleExpired(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*Model) int // returns seq to pass to HandleExpired
+		wantText string
+		wantKind Kind
+	}{
+		{
+			name: "ignores_stale_sequence",
+			setup: func(m *Model) int {
+				_ = m.SetStatusWithTTL("first", Warning, 0)
+				firstSeq := m.seq
+				_ = m.SetStatusWithTTL("second", Success, 0)
+				return firstSeq
+			},
+			wantText: "second",
+			wantKind: Success,
+		},
+		{
+			name: "resets_to_default_when_seq_matches",
+			setup: func(m *Model) int {
+				_ = m.SetStatusWithTTL("boom", Error, 0)
+				return m.seq
+			},
+			wantText: defaultText,
+			wantKind: Info,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			seq := tt.setup(&m)
+			m.HandleExpired(ExpiredMsg{Seq: seq})
+			if m.text != tt.wantText {
+				t.Errorf("text = %q, want %q", m.text, tt.wantText)
+			}
+			if m.kind != tt.wantKind {
+				t.Errorf("kind = %v, want %v", m.kind, tt.wantKind)
 			}
 		})
 	}

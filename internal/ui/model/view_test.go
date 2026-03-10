@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	"github.com/jxdones/stoat/internal/ui/components/table"
 )
 
@@ -19,14 +20,14 @@ func TestView(t *testing.T) {
 			name:         "normal_size_returns_full_layout",
 			width:        80,
 			height:       24,
-			wantContains: []string{"No connection", "Filter:", "No data source", " Ready", "q", "tab"},
+			wantContains: []string{"No connection", "Filter:", "No data source", " Ready", "j/k", "g/G"},
 			altScreen:    true,
 		},
 		{
 			name:         "small_height_shows_compact_resize_message",
 			width:        80,
 			height:       10,
-			wantContains: []string{"Terminal too small", "Minimum: 80x24", "Resize the terminal", "q"},
+			wantContains: []string{"Terminal too small", "Minimum: 80x24", "Resize the terminal", "q quit"},
 			altScreen:    true,
 		},
 		{
@@ -225,22 +226,22 @@ func TestRenderOptions(t *testing.T) {
 		{
 			name:         "base_returns_non_empty_with_help",
 			width:        80,
-			wantContains: []string{"q", "quit", "tab"},
+			wantContains: []string{"j/k", "g/G"},
 		},
 		{
 			name:         "large_width_still_renders",
 			width:        200,
-			wantContains: []string{"q", "tab"},
+			wantContains: []string{"tab", "esc"},
 		},
 		{
 			name:         "small_width_uses_inner_width_at_least_one",
 			width:        3,
-			wantContains: []string{"q"},
+			wantContains: []string{},
 		},
 		{
 			name:         "width_two_inner_width_one",
 			width:        2,
-			wantContains: []string{"q"},
+			wantContains: []string{},
 		},
 	}
 	for _, tt := range tests {
@@ -351,7 +352,7 @@ func TestRenderTable(t *testing.T) {
 			setupTable:   nil,
 			width:        60,
 			height:       10,
-			wantContains: []string{"No data source connected", "Press 'q' to exit"},
+			wantContains: []string{"No data source connected", "Press Esc then q to exit", "Ctrl+C"},
 		},
 		{
 			name:         "empty_table_small_dimensions_no_panic",
@@ -504,7 +505,7 @@ func TestNormalizeCanvas(t *testing.T) {
 				t.Errorf("normalizeCanvas(%q, %d, %d):\ngot  %q\nwant %q",
 					tt.content, tt.width, tt.height, got, tt.want)
 			}
-			// Sanity: result has exactly height lines
+			// Verify the result has exactly height lines.
 			if tt.want != "" {
 				lines := strings.Split(got, "\n")
 				if len(lines) != tt.height {
@@ -513,4 +514,38 @@ func TestNormalizeCanvas(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStatusBindings(t *testing.T) {
+	t.Run("focus_none_includes_q_quit", func(t *testing.T) {
+		m := New()
+		m.view.focus = FocusNone
+		bindings := m.statusBindings()
+		assertBindingExists(t, bindings, "q", "quit")
+	})
+
+	t.Run("pane_focus_keeps_global_bindings", func(t *testing.T) {
+		m := New()
+		m.view.focus = FocusTable
+		bindings := m.statusBindings()
+		assertBindingExists(t, bindings, "tab", "focus panes")
+		assertBindingExists(t, bindings, "shift+tab", "focus previous pane")
+		assertBindingExists(t, bindings, "esc", "clear focus")
+		assertBindingExists(t, bindings, "ctrl+n/b", "next/prev page")
+	})
+}
+
+func assertBindingExists(t *testing.T, bindings []key.Binding, keyName, desc string) {
+	t.Helper()
+	for _, binding := range bindings {
+		h := binding.Help()
+		if h.Key != keyName {
+			continue
+		}
+		if desc != "" && h.Desc != desc {
+			t.Fatalf("binding %q desc = %q, want %q", keyName, h.Desc, desc)
+		}
+		return
+	}
+	t.Fatalf("expected binding %q not found", keyName)
 }

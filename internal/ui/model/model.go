@@ -10,20 +10,11 @@ import (
 	"github.com/jxdones/stoat/internal/ui/components/statusbar"
 	"github.com/jxdones/stoat/internal/ui/components/table"
 	"github.com/jxdones/stoat/internal/ui/components/tabs"
+	"github.com/jxdones/stoat/internal/ui/datasource"
 	"github.com/jxdones/stoat/internal/ui/viewstate"
 )
 
-// FocusedPanel indicates which panel receives key input.
-type FocusedPanel int
-
-const (
-	FocusNone FocusedPanel = iota
-	FocusSidebar
-	FocusFilterbox
-	FocusTable
-	FocusQuerybox
-)
-
+// screenState tracks the size and focus of the main screen.
 type screenState struct {
 	width   int
 	height  int
@@ -31,20 +22,21 @@ type screenState struct {
 	compact bool
 }
 
-// Model is the root Bubble Tea model. It holds all component models and
-// delegates Init/Update/View to them as appropriate.
+// Model is the root Bubble Tea model; it composes the sidebar, table, status bar, and other components.
 type Model struct {
 	view screenState
 
+	source    datasource.DataSource
 	sidebar   sidebar.Model
 	statusbar statusbar.Model
 	tabs      tabs.Model
 	querybox  querybox.Model
 	filterbox filterbox.Model
 	table     table.Model
+	paging    pagingState
 }
 
-// New returns a new root model with default component state.
+// New creates a new root model with default component state.
 func New() Model {
 	m := Model{
 		sidebar:   sidebar.New(nil, nil),
@@ -58,17 +50,35 @@ func New() Model {
 			height: 24,
 			focus:  FocusSidebar,
 		},
+		paging: pagingState{
+			afterStack: []string{""},
+			pendingNav: pageNavNone,
+		},
 	}
 	m.applyViewState()
 	return m
 }
 
-// Init implements tea.Model.
+// Init loads databases when a data source is set.
 func (m Model) Init() tea.Cmd {
+	if m.HasConnection() {
+		return LoadDatabasesCmd(m.source)
+	}
 	return nil
 }
 
-// applyViewState applies the view state to the model.
+// SetDataSource sets the data source.
+// Pass nil when disconnected. The model uses it to load tables, rows, etc.
+func (m *Model) SetDataSource(source datasource.DataSource) {
+	m.source = source
+}
+
+// HasConnection checks if the model has an active data source.
+func (m Model) HasConnection() bool {
+	return m.source != nil
+}
+
+// applyViewState updates the view state based on the current terminal size.
 func (m *Model) applyViewState() {
 	frame := computeLayout(m.view.width, m.view.height)
 
@@ -105,103 +115,32 @@ func (m *Model) applyViewState() {
 	)
 }
 
-// isFocused returns true if the given panel is focused.
+// isFocused checks if the given panel is focused.
 func (m Model) isFocused(p FocusedPanel) bool {
 	return m.view.focus == p
 }
 
-// Update implements tea.Model. It handles window resize and delegates key
-// messages to the focused component. Sidebar events (e.g. EventOpenRequested)
-// are handled here; you can extend to run commands (load tables, run query).
+// Update handles window resize, async load results,
+// and key messages for the focused component.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case DatabasesLoadedMsg:
+		return m.handleDatabasesLoaded(msg)
+	case TablesLoadedMsg:
+		return m.handleTablesLoaded(msg)
+	case RowsLoadedMsg:
+		return m.handleRowsLoaded(msg)
+	case QueryExecutedMsg:
+		return m.handleQueryExecuted(msg)
+	case QueryRunRequestedMsg:
+		return m, RunQueryCmd(m.source, msg.Query)
 	case tea.WindowSizeMsg:
-		m.view.width = msg.Width
-		m.view.height = msg.Height
-		m.applyViewState()
+		return m.handleWindowSize(msg)
+	case statusbar.ExpiredMsg:
+		m.statusbar.HandleExpired(msg)
 		return m, nil
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "tab":
-			m.focusNext()
-			m.applyViewState()
-			return m, nil
-		case "shift+tab":
-			m.focusPrevious()
-			m.applyViewState()
-			return m, nil
-		default:
-			return m.updateFocused(msg)
-		}
+		return m.handleKeyPress(msg)
 	}
 	return m, nil
-}
-
-// updateFocused forwards the message to the focused panel and returns the updated model and any command.
-func (m Model) updateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch m.view.focus {
-	case FocusSidebar:
-		next, ev := m.sidebar.Update(msg)
-		m.sidebar = next
-		switch ev {
-		case sidebar.EventOpenRequested:
-			if !m.sidebar.InTablesSection() {
-				m.sidebar.OpenSelectedDatabase()
-				m.applyViewState()
-				return m, nil
-			}
-			m.view.focus = FocusTable
-			m.applyViewState()
-			return m, nil
-		}
-	case FocusQuerybox:
-		next, cmd := m.querybox.Update(msg)
-		m.querybox = next
-		return m, cmd
-	case FocusFilterbox:
-		next, cmd := m.filterbox.Update(msg)
-		m.filterbox = next
-		return m, cmd
-	case FocusTable:
-		next, cmd := m.table.Update(msg)
-		m.table = next
-		return m, cmd
-	}
-	return m, nil
-}
-
-// focusNext focuses the next panel in the order:
-// Sidebar -> Filterbox -> Table -> Querybox -> Sidebar.
-func (m *Model) focusNext() {
-	switch m.view.focus {
-	case FocusSidebar:
-		m.view.focus = FocusFilterbox
-	case FocusFilterbox:
-		m.view.focus = FocusTable
-	case FocusTable:
-		m.view.focus = FocusQuerybox
-	case FocusQuerybox:
-		m.view.focus = FocusSidebar
-	default:
-		m.view.focus = FocusSidebar
-	}
-}
-
-// focusPrevious focuses the previous panel in the order:
-// Sidebar -> Querybox -> Table -> Filterbox -> Sidebar.
-func (m *Model) focusPrevious() {
-	switch m.view.focus {
-	case FocusSidebar:
-		m.view.focus = FocusQuerybox
-	case FocusQuerybox:
-		m.view.focus = FocusTable
-	case FocusTable:
-		m.view.focus = FocusFilterbox
-	case FocusFilterbox:
-		m.view.focus = FocusSidebar
-	default:
-		m.view.focus = FocusSidebar
-	}
 }

@@ -68,10 +68,8 @@ func (m Model) View() tea.View {
 	width := common.ClampMin(m.width, 24)
 	contentWidth := common.BoxContentWidth(width)
 
-	prefixText := "Sections: "
-	prefix := lipgloss.NewStyle().Foreground(theme.Current.TabsPrefix).Render(prefixText)
-	used := len([]rune(prefixText))
-	line := prefix
+	used := 0
+	line := ""
 
 	for i, tab := range m.tabs {
 		partText := fmt.Sprintf("%d:%s", i+1, tab)
