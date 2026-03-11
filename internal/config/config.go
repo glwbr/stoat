@@ -44,7 +44,7 @@ func EnsureConfigDir() error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(dir, 0700)
+	return os.MkdirAll(dir, 0o700)
 }
 
 // DefaultConfig returns config with standard values (e.g. for first-run).
@@ -67,7 +67,7 @@ func WriteConfig(cfg Config) error {
 		return err
 	}
 	header := "# " + path + "\n\n"
-	return os.WriteFile(path, append([]byte(header), data...), 0600)
+	return os.WriteFile(path, append([]byte(header), data...), 0o600)
 }
 
 // LoadConfig loads the config from the config file.

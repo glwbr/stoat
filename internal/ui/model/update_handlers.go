@@ -163,6 +163,9 @@ func (m Model) handleUpdateFromCell(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bo
 	return m, OpenEditorWithQueryCmd(q), true
 }
 
+// keyHandler is a function that handles a key press and returns whether it was handled.
+type keyHandler func(tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
+
 // handleKeyPress handles the KeyPressMsg and updates the focused component.
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -192,23 +195,18 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.applyViewState()
 		return m, nil
 	default:
-		if next, cmd, handled := m.handleApplyFilter(msg); handled {
-			return next, cmd
+		handlers := []keyHandler{
+			m.handleApplyFilter,
+			m.handleUpdateFromCell,
+			m.handleQueryShortcut,
+			m.handlePagingShortcut,
+			m.handleExpandSavedQuery,
+			m.handleCopyCellValueFromTable,
 		}
-		if next, cmd, handled := m.handleUpdateFromCell(msg); handled {
-			return next, cmd
-		}
-		if next, cmd, handled := m.handleQueryShortcut(msg); handled {
-			return next, cmd
-		}
-		if next, cmd, handled := m.handlePagingShortcut(msg); handled {
-			return next, cmd
-		}
-		if next, cmd, handled := m.handleExpandSavedQuery(msg); handled {
-			return next, cmd
-		}
-		if next, cmd, handled := m.handleCopyCellValueFromTable(msg); handled {
-			return next, cmd
+		for _, h := range handlers {
+			if next, cmd, handled := h(msg); handled {
+				return next, cmd
+			}
 		}
 		return m.handleUpdateFocused(msg)
 	}

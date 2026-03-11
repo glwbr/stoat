@@ -47,7 +47,7 @@ type Model struct {
 	tablePKColumns []string
 	tablePKTarget  database.DatabaseTarget
 
-	viewingQueryResult bool // It's true when the table content is from a run query. 
+	viewingQueryResult bool   // It's true when the table content is from a run query.
 	queryResultPreview string // truncated one-line preview of the last run query for the header
 }
 
