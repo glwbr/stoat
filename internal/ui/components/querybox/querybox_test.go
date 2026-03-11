@@ -221,6 +221,93 @@ func TestView(t *testing.T) {
 	}
 }
 
+func TestLineInfo(t *testing.T) {
+	tests := []struct {
+		name       string
+		setValue   string
+		wantOffset int // CharOffset (cursor at end after SetValue)
+	}{
+		{
+			name:       "empty",
+			setValue:   "",
+			wantOffset: 0,
+		},
+		{
+			name:       "single_line",
+			setValue:   "SELECT 1",
+			wantOffset: 8,
+		},
+		{
+			name:       "multi_line",
+			setValue:   "SELECT 1\nFROM t",
+			wantOffset: 6, // cursor on second line, 6 chars in "FROM t"
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			m.SetValue(tt.setValue)
+			info := m.LineInfo()
+			if info.CharOffset != tt.wantOffset {
+				t.Errorf("LineInfo().CharOffset = %d, want %d", info.CharOffset, tt.wantOffset)
+			}
+		})
+	}
+}
+
+func TestAdvanceCursor(t *testing.T) {
+	tests := []struct {
+		name        string
+		setValue    string
+		moveToStart bool // send KeyHome so cursor at 0 before AdvanceCursor
+		advance     int
+		wantOffset  int
+	}{
+		{
+			name:        "advance_zero",
+			setValue:    "ab",
+			moveToStart: true,
+			advance:     0,
+			wantOffset:  0,
+		},
+		{
+			name:        "advance_one",
+			setValue:    "abc",
+			moveToStart: true,
+			advance:     1,
+			wantOffset:  1,
+		},
+		{
+			name:        "advance_two",
+			setValue:    "abc",
+			moveToStart: true,
+			advance:     2,
+			wantOffset:  2,
+		},
+		{
+			name:        "advance_past_end_clamps",
+			setValue:    "ab",
+			moveToStart: true,
+			advance:     10,
+			wantOffset:  2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			m.SetValue(tt.setValue)
+			if tt.moveToStart {
+				m, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyHome}))
+			}
+			m.AdvanceCursor(tt.advance)
+			info := m.LineInfo()
+			if info.CharOffset != tt.wantOffset {
+				t.Errorf("after AdvanceCursor(%d) LineInfo().CharOffset = %d, want %d", tt.advance, info.CharOffset, tt.wantOffset)
+			}
+		})
+	}
+}
+
 func TestHelpBindings(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -231,6 +318,11 @@ func TestHelpBindings(t *testing.T) {
 			name:     "run_query_binding",
 			wantKey:  "ctrl+s",
 			wantHelp: "run query",
+		},
+		{
+			name:     "expand_saved_query_binding",
+			wantKey:  "ctrl+n",
+			wantHelp: "expand saved query",
 		},
 	}
 	for _, tt := range tests {

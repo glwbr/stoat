@@ -20,6 +20,7 @@ lint:
 
 clean:
 	rm -rf bin
+	rm -f $(TARGET)-$(VERSION).tar.gz
 
 release: clean
 	$(GO) build -o bin/$(TARGET) cmd/$(TARGET)/main.go

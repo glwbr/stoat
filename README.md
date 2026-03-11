@@ -39,6 +39,8 @@ make build    # builds bin/stoat
 ./bin/stoat --db ./mydb.sqlite
 ```
 
+**Usage:** `stoat [--db path/to/database.sqlite]` — pass a SQLite file to open it on startup; otherwise start with no database.
+
 ### Development commands
 
 ```bash
@@ -65,8 +67,31 @@ make lint     # run golangci-lint
 | `N` + motion (e.g. `4h`, `4l`, `10j`) | Repeat motion `N` times (vim count prefix) | Table |
 | `Enter` | Open editor with UPDATE query for selected cell (save & quit to run) | Table |
 | `Ctrl+S` | Run query | Query box |
+| `Ctrl+N` | Expand saved query (type `@Name` then Ctrl+N to insert) | Query box |
 
 The options bar at the bottom shows shortcuts for the currently focused pane (sidebar, filter, table, or query). When focus is clear, it shows `q` quit.
+
+## Configuration
+
+Stoat reads configuration from **`~/.stoat/config.yaml`**. This file is created automatically on first run with default values.
+
+| Option | Description |
+|--------|-------------|
+| `theme` | UI theme: `default`, `dracula`, or `solarized`. |
+| `saved_queries` | List of named SQL snippets. In the query box, type `@Name` and press **Ctrl+N** to expand a saved query by name. |
+
+Example:
+
+```yaml
+# ~/.stoat/config.yaml
+theme: default
+
+saved_queries:
+  - name: recent_users
+    query: SELECT * FROM users ORDER BY updated_at DESC LIMIT 10
+  - name: schema
+    query: SELECT name, sql FROM sqlite_master WHERE type = 'table'
+```
 
 ## License
 

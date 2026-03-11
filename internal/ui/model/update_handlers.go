@@ -200,8 +200,25 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if next, cmd, handled := m.handlePagingShortcut(msg); handled {
 			return next, cmd
 		}
+		if next, cmd, handled := m.handleExpandSavedQuery(msg); handled {
+			return next, cmd
+		}
 		return m.handleUpdateFocused(msg)
 	}
+}
+
+// handleExpandSavedQuery handles Ctrl+N when the querybox is focused: tries to expand a saved query.
+// If expansion happens it returns the updated model and true
+func (m Model) handleExpandSavedQuery(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	if msg.String() != "ctrl+n" || !m.isFocused(FocusQuerybox) {
+		return m, nil, false
+	}
+	next, expanded := m.ExpandSavedQuery()
+	if !expanded {
+		return m, nil, false
+	}
+	next.applyViewState()
+	return next, nil, true
 }
 
 // handleQueryShortcut handles the query shortcut key press.

@@ -87,6 +87,18 @@ func (m *Model) SetValue(value string) {
 	m.input.SetValue(value)
 }
 
+// LineInfo returns the line information of the query box.
+func (m Model) LineInfo() textarea.LineInfo {
+	return m.input.LineInfo()
+}
+
+// AdvanceCursor advances the cursor by n characters.
+func (m *Model) AdvanceCursor(n int) {
+	for range n {
+		m.input, _ = m.input.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
+	}
+}
+
 // Update handles key messages and updates the model state.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -107,6 +119,10 @@ func HelpBindings() []key.Binding {
 		key.NewBinding(
 			key.WithKeys("ctrl+s"),
 			key.WithHelp("ctrl+s", "run query"),
+		),
+		key.NewBinding(
+			key.WithKeys("ctrl+n"),
+			key.WithHelp("ctrl+n", "expand saved query"),
 		),
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jxdones/stoat/internal/config"
 	"github.com/jxdones/stoat/internal/database"
 	"github.com/jxdones/stoat/internal/database/provider"
 	"github.com/jxdones/stoat/internal/ui/datasource"
@@ -22,12 +23,12 @@ func main() {
 
 	if *dbPath != "" {
 		path := *dbPath
-		config := database.Config{
+		dbCfg := database.Config{
 			Name:   filepath.Base(path),
 			DBMS:   database.DBMSSQLite,
 			Values: map[string]string{"path": path},
 		}
-		conn, err := provider.FromConfig(config)
+		conn, err := provider.FromConfig(dbCfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "open database: %v\n", err)
 			os.Exit(1)
@@ -35,6 +36,13 @@ func main() {
 		defer conn.Close()
 		m.SetDataSource(datasource.FromConnection(conn))
 	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
+		os.Exit(1)
+	}
+	m.SetConfig(cfg)
 
 	program := tea.NewProgram(m)
 	if _, err := program.Run(); err != nil {

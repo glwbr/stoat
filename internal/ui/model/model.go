@@ -3,6 +3,7 @@ package model
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jxdones/stoat/internal/config"
 	"github.com/jxdones/stoat/internal/database"
 	"github.com/jxdones/stoat/internal/ui/common"
 	"github.com/jxdones/stoat/internal/ui/components/filterbox"
@@ -12,6 +13,7 @@ import (
 	"github.com/jxdones/stoat/internal/ui/components/table"
 	"github.com/jxdones/stoat/internal/ui/components/tabs"
 	"github.com/jxdones/stoat/internal/ui/datasource"
+	"github.com/jxdones/stoat/internal/ui/theme"
 	"github.com/jxdones/stoat/internal/ui/viewstate"
 )
 
@@ -27,14 +29,15 @@ type screenState struct {
 type Model struct {
 	view screenState
 
-	source    datasource.DataSource
-	sidebar   sidebar.Model
-	statusbar statusbar.Model
-	tabs      tabs.Model
-	querybox  querybox.Model
-	filterbox filterbox.Model
-	table     table.Model
-	paging    pagingState
+	source       datasource.DataSource
+	sidebar      sidebar.Model
+	statusbar    statusbar.Model
+	tabs         tabs.Model
+	querybox     querybox.Model
+	filterbox    filterbox.Model
+	table        table.Model
+	paging       pagingState
+	savedQueries []SavedQuery
 
 	// tablePKColumns are primary key column names for the table last loaded; used to build
 	// a safe WHERE clause when generating UPDATE from a cell. tablePKTarget identifies
@@ -61,6 +64,7 @@ func New() Model {
 			afterStack: []string{""},
 			pendingNav: pageNavNone,
 		},
+		savedQueries: []SavedQuery{},
 	}
 	m.applyViewState()
 	return m
@@ -125,6 +129,26 @@ func (m *Model) applyViewState() {
 // isFocused checks if the given panel is focused.
 func (m Model) isFocused(p FocusedPanel) bool {
 	return m.view.focus == p
+}
+
+// SetConfig sets the configuration.
+func (m *Model) SetConfig(config config.Config) {
+	if _, ok := theme.SetNamedTheme(config.Theme); ok {
+		m.applyViewState()
+	}
+	m.savedQueries = toModelSavedQueries(config.SavedQueries)
+}
+
+// toModelSavedQueries converts a list of config.SavedQuery to a list of Model.SavedQuery.
+func toModelSavedQueries(savedQueries []config.SavedQuery) []SavedQuery {
+	modelSavedQueries := make([]SavedQuery, len(savedQueries))
+	for i, savedQuery := range savedQueries {
+		modelSavedQueries[i] = SavedQuery{
+			Name:  savedQuery.Name,
+			Query: savedQuery.Query,
+		}
+	}
+	return modelSavedQueries
 }
 
 // Update handles window resize, async load results,
