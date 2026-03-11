@@ -1,16 +1,21 @@
-<h1>
-<p align="center">
-  <img src="assets/stoat.png" alt="Stoat logo" width="150"/>
-  <br>Stoat
-</p>
-</h1>
+<div align="center">
+  <p>
+    <img src="assets/stoat.png" alt="Stoat logo" width="150"/>
+    <h2>Stoat</h2>
+  </p>
+  </h1>
 
-<p align="center">A super light, terminal-native database client.</p>
+  <p>A super light, terminal-native database client.</p>
 
-Built with [Bubbletea](https://github.com/charmbracelet/bubbletea), Stoat is for developers who want to inspect schemas, browse table data, and run SQL without leaving the keyboard.
+  <p>
+    <img src="assets/stoat.gif" alt="Stoat logo" width="720"/>
+  </p>
+
+Stoat is for developers who want to inspect schemas, browse table data, and run SQL without leaving the keyboard. Built with [Bubbletea](https://github.com/charmbracelet/bubbletea),
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Go Version](https://img.shields.io/badge/go-1.25.5+-00ADD8.svg)
+</div>
 
 ## Why Stoat?
 
@@ -32,11 +37,41 @@ Stoat is early in development and currently focused on local SQLite workflows.
 - Run ad-hoc SQL from the query box
 - Navigate the UI with vim-style keys
 
+## Installation
+
+**One-liner** (requires [Go](https://go.dev/dl/) installed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh
+```
+
+To install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.2.1
+```
+
+The script uses `go install` and puts the `stoat` binary in **$GOBIN** (default `$HOME/go/bin`). Ensure that directory is in your `PATH`.
+
+**From the repo root** (developers):
+
+```bash
+make install
+```
+
+To install to a specific prefix (e.g. user-local without sudo):
+
+```bash
+PREFIX=$HOME/.local
+make install-prefix
+```
+
+Then add `$HOME/.local/bin` to your `PATH` if needed.
+
 ## Quick start
 
 ```bash
-make build    # builds bin/stoat
-./bin/stoat --db ./mydb.sqlite
+stoat --db path/to/database.sqlite
 ```
 
 **Usage:** `stoat [--db path/to/database.sqlite]` — pass a SQLite file to open it on startup; otherwise start with no database.
