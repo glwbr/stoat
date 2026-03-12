@@ -291,8 +291,14 @@ func (m Model) renderForeignKeys(width, height int) string {
 		line += "\n"
 		content = append(content, line)
 	}
+	innerHeight := common.PaneInnerHeight(height)
+	lines := strings.Split(strings.Join(content, "\n"), "\n")
+	if len(lines) > innerHeight {
+		lines = lines[:innerHeight]
+	}
+	clipped := strings.Join(lines, "\n")
 	return common.BorderedPane(width, height, m.isFocused(FocusTable), common.FocusBorder(m.isFocused(FocusTable))).
-		Render(strings.Join(content, "\n"))
+		Render(lipgloss.NewStyle().Foreground(theme.Current.TextMuted).Render(clipped))
 }
 
 // normalizeCanvas clips/pads content to an exact width x height rectangle.

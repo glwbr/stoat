@@ -15,10 +15,11 @@ import (
 
 // Model represents a list of tabs and the active tab.
 type Model struct {
-	tabs   []string
-	active int
-	width  int
-	focus  bool
+	tabs      []string
+	shortTabs []string
+	active    int
+	width     int
+	focus     bool
 }
 
 // New creates a new tabs model with the given tabs. The first tab is active.
@@ -28,6 +29,14 @@ func New(tabs []string) Model {
 		active: 0,
 		width:  24,
 	}
+}
+
+// NewWithShortLabels creates a new tabs model with full and short labels.
+// Short labels are used when the full labels do not fit the available width.
+func NewWithShortLabels(full, short []string) Model {
+	m := New(full)
+	m.shortTabs = short
+	return m
 }
 
 // SetActive sets the active tab by index (0-based). No-op if index is out of range.
@@ -71,7 +80,25 @@ func (m Model) View() tea.View {
 	used := 0
 	line := ""
 
-	for i, tab := range m.tabs {
+	labels := m.tabs
+	if len(m.shortTabs) == len(m.tabs) {
+		total := 0
+		// count the total width of the full labels
+		for i, tab := range m.tabs {
+			seg := fmt.Sprintf("%d:%s", i+1, tab)
+			if i > 0 {
+				seg = " | " + seg
+			}
+			total += len([]rune(seg))
+		}
+		// if the total width of the full labels is greater than the available width,
+		// use the short labels instead
+		if total > contentWidth {
+			labels = m.shortTabs
+		}
+	}
+
+	for i, tab := range labels {
 		partText := fmt.Sprintf("%d:%s", i+1, tab)
 		segmentText := partText
 		if i > 0 {

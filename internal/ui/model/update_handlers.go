@@ -505,7 +505,7 @@ func (m Model) handleTabSwitch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case 2:
 		cols, rows := schemaConstraintsToTable(m.tableSchema.constraints)
 		m.schemaTable = table.New(cols, rows)
-	case 3:
+	case 4:
 		cols, rows := schemaIndexesToTable(m.tableSchema.indexes)
 		m.schemaTable = table.New(cols, rows)
 	}

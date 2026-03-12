@@ -69,9 +69,12 @@ func New() Model {
 		sidebar:   sidebar.New(nil, nil),
 		statusbar: statusbar.New(),
 		filterbox: filterbox.New(),
-		tabs:      tabs.New([]string{"Records", "Columns", "Constraints", "Foreign Keys", "Indexes"}),
-		table:     table.New(nil, nil),
-		querybox:  querybox.New(),
+		tabs: tabs.NewWithShortLabels(
+			[]string{"Records", "Columns", "Constraints", "Foreign Keys", "Indexes"},
+			[]string{"Recs", "Cols", "Cons", "FKs", "Idx"},
+		),
+		table:    table.New(nil, nil),
+		querybox: querybox.New(),
 		view: screenState{
 			width:  80,
 			height: 24,

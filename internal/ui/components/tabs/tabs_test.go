@@ -251,6 +251,83 @@ func TestView(t *testing.T) {
 	}
 }
 
+func TestNewWithShortLabels(t *testing.T) {
+	prev := theme.Current
+	t.Cleanup(func() { theme.Current = prev })
+	theme.Current = theme.DefaultTheme()
+
+	full := []string{"Records", "Columns", "Constraints", "Foreign Keys", "Indexes"}
+	short := []string{"Recs", "Cols", "Cons", "FKs", "Idx"}
+
+	tests := []struct {
+		name            string
+		shortLabels     []string
+		width           int
+		activeIdx       int
+		wantActiveTab   string
+		wantContains    string
+		wantNotContains string
+	}{
+		{
+			name:          "active_tab_returns_full_label_at_index_0",
+			shortLabels:   short,
+			width:         80,
+			activeIdx:     0,
+			wantActiveTab: "Records",
+		},
+		{
+			name:          "active_tab_returns_full_label_at_index_3",
+			shortLabels:   short,
+			width:         80,
+			activeIdx:     3,
+			wantActiveTab: "Foreign Keys",
+		},
+		{
+			name:         "wide_terminal_renders_full_labels",
+			shortLabels:  short,
+			width:        80, // contentWidth=76, full labels=66 — fits
+			wantContains: "Records",
+		},
+		{
+			name:            "narrow_terminal_renders_short_labels",
+			shortLabels:     short,
+			width:           40, // contentWidth=36, full labels=66 — does not fit
+			wantContains:    "Recs",
+			wantNotContains: "Records",
+		},
+		{
+			name:         "mismatched_short_labels_falls_back_to_clipping",
+			shortLabels:  []string{"Recs"}, // wrong length — ignored
+			width:        40,
+			wantContains: "1:Records",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewWithShortLabels(full, tt.shortLabels)
+			m.SetSize(tt.width)
+			m.SetActive(tt.activeIdx)
+
+			if tt.wantActiveTab != "" {
+				if got := m.ActiveTab(); got != tt.wantActiveTab {
+					t.Errorf("ActiveTab() = %q, want %q", got, tt.wantActiveTab)
+				}
+			}
+
+			if tt.wantContains != "" || tt.wantNotContains != "" {
+				plain := testutil.StripANSI(m.View().Content)
+				if tt.wantContains != "" && regexp.MustCompile(regexp.QuoteMeta(tt.wantContains)).FindString(plain) == "" {
+					t.Errorf("View() should contain %q; got: %q", tt.wantContains, plain)
+				}
+				if tt.wantNotContains != "" && regexp.MustCompile(regexp.QuoteMeta(tt.wantNotContains)).FindString(plain) != "" {
+					t.Errorf("View() should not contain %q; got: %q", tt.wantNotContains, plain)
+				}
+			}
+		})
+	}
+}
+
 func TestHelpBindings(t *testing.T) {
 	tests := []struct {
 		name     string
