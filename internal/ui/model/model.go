@@ -47,6 +47,10 @@ type Model struct {
 	// data
 	tableSchema tableSchema
 
+	// pendingConfig holds a database config that has not yet been connected to.
+	// When set, Init fires an async ConnectCmd instead of loading databases directly.
+	pendingConfig *database.Config
+
 	source       datasource.DataSource
 	sidebar      sidebar.Model
 	statusbar    statusbar.Model
@@ -104,8 +108,13 @@ func New() Model {
 	return m
 }
 
-// Init loads databases when a data source is set.
+// Init starts the connection when a pending config is present, or loads
+// databases immediately when a data source is already set (e.g. in tests).
 func (m Model) Init() tea.Cmd {
+	if m.pendingConfig != nil {
+		cfg := *m.pendingConfig
+		return func() tea.Msg { return ConnectingMsg{cfg: cfg} }
+	}
 	if m.HasConnection() {
 		return LoadDatabasesCmd(m.source)
 	}
@@ -118,9 +127,22 @@ func (m *Model) SetDataSource(source datasource.DataSource) {
 	m.source = source
 }
 
+// SetPendingConfig stores a database config to be connected asynchronously
+// when the program starts. Init will fire a ConnectCmd for it.
+func (m *Model) SetPendingConfig(cfg database.Config) {
+	m.pendingConfig = &cfg
+}
+
 // HasConnection checks if the model has an active data source.
 func (m Model) HasConnection() bool {
 	return m.source != nil
+}
+
+// Close releases the active data source connection, if any.
+func (m Model) Close() {
+	if m.source != nil {
+		_ = m.source.Close()
+	}
 }
 
 // applyViewState updates the view state based on the current terminal size.
@@ -202,6 +224,12 @@ func toModelSavedQueries(savedQueries []config.SavedQuery) []SavedQuery {
 // and key messages for the focused component.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case ConnectingMsg:
+		return m.handleConnecting(msg)
+	case ConnectedMsg:
+		return m.handleConnected(msg)
+	case ConnectionFailedMsg:
+		return m.handleConnectionFailed(msg)
 	case DatabasesLoadedMsg:
 		return m.handleDatabasesLoaded(msg)
 	case TablesLoadedMsg:

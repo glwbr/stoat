@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/jxdones/stoat/internal/database"
@@ -20,23 +19,6 @@ const (
 	paginationByRowID paginationMode = iota
 	paginationByIntegerPK
 	paginationByOffset
-)
-
-// offsetCursorSkipCurrentRow is added to the offset when building the next-page cursor
-// so the next page starts after the current row.
-const offsetCursorSkipCurrentRow = 1
-
-// Constants for cursor parsing and conversion.
-const (
-	decimalBase  = 10
-	int64BitSize = 64
-)
-
-// Constants for column display.
-const (
-	minColumnWidth = 8
-	maxColumnWidth = 24
-	columnNamePad  = 2
 )
 
 // tableInfo holds column metadata for one table column.
@@ -145,7 +127,7 @@ func buildPageColumns(columnsInfo []tableInfo) ([]string, []string) {
 	selectColumns := make([]string, 0, len(columnsInfo))
 	for _, column := range columnsInfo {
 		columnNames = append(columnNames, column.Name)
-		selectColumns = append(selectColumns, quoteIdentifier(column.Name))
+		selectColumns = append(selectColumns, database.QuoteIdentifier(column.Name))
 	}
 	return columnNames, selectColumns
 }
@@ -154,7 +136,7 @@ func buildPageColumns(columnsInfo []tableInfo) ([]string, []string) {
 // It chooses a strategy based on the table: rowid, single integer primary key, or offset.
 // Returns an error if the table cannot be inspected or the cursor is invalid.
 func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInfo []tableInfo, columnNames, selectColumns []string, page database.PageRequest, pageLimit int) (rowsPagePlan, error) {
-	cursorAlias := uniqueCursorAlias(columnNames)
+	cursorAlias := database.UniqueCursorAlias(columnNames)
 	primaryKeyColumns := orderedPrimaryKeyColumns(columnsInfo)
 	withoutRowID, err := isTableWithoutRowID(ctx, db, table)
 	if err != nil {
@@ -165,7 +147,7 @@ func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInf
 	limit := pageLimit + 1
 	switch {
 	case !withoutRowID:
-		after, err := parseCursor(page.After, "rowid")
+		after, err := database.ParseCursor(page.After, "rowid")
 		if err != nil {
 			return rowsPagePlan{}, err
 		}
@@ -177,21 +159,21 @@ func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInf
 			mode: paginationByRowID,
 			query: fmt.Sprintf(
 				"SELECT rowid AS %s, %s FROM %s %s ORDER BY rowid LIMIT %d;",
-				quoteIdentifier(cursorAlias),
+				database.QuoteIdentifier(cursorAlias),
 				strings.Join(selectColumns, ", "),
-				quoteIdentifier(table),
+				database.QuoteIdentifier(table),
 				where,
 				limit,
 			),
 			scanOffset: 1, // first column is the rowid cursor
 			afterValue: after,
 		}, nil
-	case len(primaryKeyColumns) == 1 && hasIntegerAffinity(columnDeclaredType(columnsInfo, primaryKeyColumns[0])):
-		after, err := parseCursor(page.After, "pk")
+	case len(primaryKeyColumns) == 1 && database.HasIntegerAffinity(columnDeclaredType(columnsInfo, primaryKeyColumns[0])):
+		after, err := database.ParseCursor(page.After, "pk")
 		if err != nil {
 			return rowsPagePlan{}, err
 		}
-		primaryKey := quoteIdentifier(primaryKeyColumns[0])
+		primaryKey := database.QuoteIdentifier(primaryKeyColumns[0])
 		where := ""
 		if after > 0 {
 			where = fmt.Sprintf("WHERE %s > %d", primaryKey, after)
@@ -201,9 +183,9 @@ func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInf
 			query: fmt.Sprintf(
 				"SELECT %s AS %s, %s FROM %s %s ORDER BY %s LIMIT %d;",
 				primaryKey,
-				quoteIdentifier(cursorAlias),
+				database.QuoteIdentifier(cursorAlias),
 				strings.Join(selectColumns, ", "),
-				quoteIdentifier(table),
+				database.QuoteIdentifier(table),
 				where,
 				primaryKey,
 				limit,
@@ -212,7 +194,7 @@ func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInf
 			afterValue: after,
 		}, nil
 	default:
-		offset, err := parseCursor(page.After, "off")
+		offset, err := database.ParseCursor(page.After, "off")
 		if err != nil {
 			return rowsPagePlan{}, err
 		}
@@ -224,8 +206,8 @@ func buildRowsPagePlan(ctx context.Context, db *sql.DB, table string, columnsInf
 			query: fmt.Sprintf(
 				"SELECT %s FROM %s ORDER BY %s LIMIT %d OFFSET %d;",
 				strings.Join(selectColumns, ", "),
-				quoteIdentifier(table),
-				primaryKeyOrderExpr(primaryKeyColumns),
+				database.QuoteIdentifier(table),
+				database.PrimaryKeyOrderExpr(primaryKeyColumns),
 				limit,
 				offset,
 			),
@@ -244,7 +226,7 @@ func scanRowsPageResult(ctx context.Context, db *sql.DB, plan rowsPagePlan, colu
 	}
 	defer rows.Close()
 
-	values, targets := makeScanBuffers(len(columnNames) + plan.scanOffset) // allocate an extra slot for the cursor column if needed
+	values, targets := database.MakeScanBuffers(len(columnNames) + plan.scanOffset) // allocate an extra slot for the cursor column if needed
 	outputRows := make([]database.Row, 0, pageLimit)
 	hasMore := false
 	nextAfter := ""
@@ -259,15 +241,15 @@ func scanRowsPageResult(ctx context.Context, db *sql.DB, plan rowsPagePlan, colu
 		}
 		switch plan.mode {
 		case paginationByOffset:
-			nextAfter = formatCursor("off", plan.afterValue+int64(len(outputRows))+offsetCursorSkipCurrentRow)
+			nextAfter = database.FormatCursor("off", plan.afterValue+int64(len(outputRows))+database.OffsetCursorSkipCurrentRow)
 		case paginationByIntegerPK:
-			nextAfter = formatCursor("pk", asInt64(values[0]))
+			nextAfter = database.FormatCursor("pk", database.AsInt64(values[0]))
 		default:
-			nextAfter = formatCursor("rowid", asInt64(values[0]))
+			nextAfter = database.FormatCursor("rowid", database.AsInt64(values[0]))
 		}
 		row := make(database.Row, len(columnNames))
 		for i, name := range columnNames {
-			row[name] = asString(values[i+plan.scanOffset])
+			row[name] = database.AsString(values[i+plan.scanOffset])
 		}
 		outputRows = append(outputRows, row)
 	}
@@ -303,7 +285,7 @@ func Query(ctx context.Context, db *sql.DB, query string) (database.QueryResult,
 	}
 
 	resultRows := make([]database.Row, 0, min(maxRows, queryResultCap))
-	values, targets := makeScanBuffers(len(columnNames))
+	values, targets := database.MakeScanBuffers(len(columnNames))
 
 	for rows.Next() {
 		if len(resultRows) >= maxRows {
@@ -315,7 +297,7 @@ func Query(ctx context.Context, db *sql.DB, query string) (database.QueryResult,
 		}
 		row := make(database.Row, len(columnNames))
 		for i, name := range columnNames {
-			row[name] = asString(values[i])
+			row[name] = database.AsString(values[i])
 		}
 		resultRows = append(resultRows, row)
 	}
@@ -343,7 +325,7 @@ func Query(ctx context.Context, db *sql.DB, query string) (database.QueryResult,
 			Key:      column,
 			Title:    column,
 			Type:     "text", // we don't infer types from ad-hoc queries; "text" is safe for display
-			MinWidth: max(minColumnWidth, min(maxColumnWidth, len([]rune(column))+columnNamePad)),
+			MinWidth: max(database.MinColumnWidth, min(database.MaxColumnWidth, len([]rune(column))+database.ColumnNamePad)),
 			Order:    i + 1, // 1-based position so UI can sort columns (e.g. Order 1 = first column)
 		})
 	}
@@ -466,7 +448,7 @@ func Constraints(ctx context.Context, db *sql.DB, target database.DatabaseTarget
 
 // ForeignKeys returns the list of foreign keys for the given table.
 func ForeignKeys(ctx context.Context, db *sql.DB, target database.DatabaseTarget) ([]database.ForeignKey, error) {
-	query := fmt.Sprintf("PRAGMA foreign_key_list(%s);", quoteIdentifier(target.Table))
+	query := fmt.Sprintf("PRAGMA foreign_key_list(%s);", database.QuoteIdentifier(target.Table))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -511,7 +493,7 @@ func ForeignKeys(ctx context.Context, db *sql.DB, target database.DatabaseTarget
 
 // tableInfoRows returns the column metadata for the given table.
 func tableInfoRows(ctx context.Context, db *sql.DB, table string) ([]tableInfo, error) {
-	query := fmt.Sprintf("PRAGMA table_info(%s);", quoteIdentifier(table))
+	query := fmt.Sprintf("PRAGMA table_info(%s);", database.QuoteIdentifier(table))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -551,7 +533,7 @@ func tableInfoRows(ctx context.Context, db *sql.DB, table string) ([]tableInfo, 
 
 // indexListRows returns the list of indexes for the given table.
 func indexListRows(ctx context.Context, db *sql.DB, table string) ([]indexListRow, error) {
-	query := fmt.Sprintf("PRAGMA index_list(%s);", quoteIdentifier(table))
+	query := fmt.Sprintf("PRAGMA index_list(%s);", database.QuoteIdentifier(table))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -584,7 +566,7 @@ func indexListRows(ctx context.Context, db *sql.DB, table string) ([]indexListRo
 
 // indexColumns returns the column names of the given index in order.
 func indexColumns(ctx context.Context, db *sql.DB, indexName string) ([]string, error) {
-	query := fmt.Sprintf("PRAGMA index_info(%s);", quoteIdentifier(indexName))
+	query := fmt.Sprintf("PRAGMA index_info(%s);", database.QuoteIdentifier(indexName))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -632,16 +614,6 @@ func indexColumns(ctx context.Context, db *sql.DB, indexName string) ([]string, 
 	return result, nil
 }
 
-// quoteIdentifier quotes an identifier for use in an SQL query.
-func quoteIdentifier(name string) string {
-	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
-}
-
-// quoteSQLString quotes a string for use in an SQL query.
-func quoteSQLString(value string) string {
-	return `'` + strings.ReplaceAll(value, `'`, `''`) + `'`
-}
-
 // orderedPrimaryKeyColumns returns the primary key column names in table order.
 // Non-PK columns and columns with empty names are ignored.
 func orderedPrimaryKeyColumns(columnsInfo []tableInfo) []string {
@@ -670,65 +642,11 @@ func orderedPrimaryKeyColumns(columnsInfo []tableInfo) []string {
 	return orderedColumns
 }
 
-// primaryKeyOrderExpr returns an ORDER BY expression for the primary key columns, or "1" if none.
-func primaryKeyOrderExpr(primaryKeyColumns []string) string {
-	if len(primaryKeyColumns) == 0 {
-		return "1"
-	}
-	out := make([]string, 0, len(primaryKeyColumns))
-	for _, column := range primaryKeyColumns {
-		out = append(out, quoteIdentifier(column))
-	}
-	return strings.Join(out, ", ")
-}
-
-// uniqueCursorAlias returns an alias for the cursor column that does not conflict with existing column names.
-func uniqueCursorAlias(columns []string) string {
-	used := make(map[string]struct{}, len(columns))
-	for _, column := range columns {
-		used[strings.ToLower(strings.TrimSpace(column))] = struct{}{}
-	}
-	alias := "__cursor"
-	for {
-		if _, ok := used[strings.ToLower(alias)]; !ok {
-			return alias
-		}
-		alias += "_"
-	}
-}
-
-// parseCursor parses the cursor string and returns the integer value for the given prefix.
-// An empty cursor returns 0, nil.
-func parseCursor(cursor string, expectedPrefix string) (int64, error) {
-	raw := strings.TrimSpace(cursor)
-	if raw == "" {
-		return 0, nil
-	}
-	if n, err := strconv.ParseInt(raw, decimalBase, int64BitSize); err == nil {
-		return n, nil
-	}
-
-	prefix := expectedPrefix + ":"
-	if !strings.HasPrefix(raw, prefix) {
-		return 0, fmt.Errorf("invalid cursor %q for mode %s", raw, expectedPrefix)
-	}
-	n, err := strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(raw, prefix)), decimalBase, int64BitSize)
-	if err != nil {
-		return 0, fmt.Errorf("invalid cursor %q for mode %s: %w", raw, expectedPrefix, err)
-	}
-	return n, nil
-}
-
-// formatCursor formats a cursor as "prefix:n".
-func formatCursor(prefix string, n int64) string {
-	return fmt.Sprintf("%s:%d", prefix, n)
-}
-
 // isTableWithoutRowID reports whether the table was created with WITHOUT ROWID.
 func isTableWithoutRowID(ctx context.Context, dbConn *sql.DB, table string) (bool, error) {
 	query := fmt.Sprintf(
 		"SELECT sql FROM sqlite_master WHERE type='table' AND name=%s LIMIT 1;",
-		quoteSQLString(strings.TrimSpace(table)),
+		database.QuoteSQLString(strings.TrimSpace(table)),
 	)
 	var createStatement sql.NullString
 	if err := dbConn.QueryRowContext(ctx, query).Scan(&createStatement); err != nil {
@@ -739,11 +657,6 @@ func isTableWithoutRowID(ctx context.Context, dbConn *sql.DB, table string) (boo
 	}
 	stmt := strings.ToUpper(strings.TrimSpace(createStatement.String))
 	return strings.Contains(stmt, "WITHOUT ROWID"), nil
-}
-
-// hasIntegerAffinity reports whether the declared type has integer affinity (e.g. INT, INTEGER).
-func hasIntegerAffinity(declaredType string) bool {
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(declaredType)), "INT")
 }
 
 // columnDeclaredType returns the declared type of the given column, or empty string if not found.
@@ -757,17 +670,6 @@ func columnDeclaredType(columnsInfo []tableInfo, column string) string {
 	return ""
 }
 
-// makeScanBuffers allocates n value slots and n pointers (targets[i] == &values[i]) for rows.Scan.
-// After calling rows.Scan(targets...), the row data lives in values.
-func makeScanBuffers(n int) ([]any, []any) {
-	values := make([]any, n)
-	targets := make([]any, n)
-	for i := range values {
-		targets[i] = &values[i]
-	}
-	return values, targets
-}
-
 // buildOutputColumns builds the display column list for the given table columns.
 func buildOutputColumns(columnsInfo []tableInfo) []database.Column {
 	columns := make([]database.Column, 0, len(columnsInfo))
@@ -776,62 +678,14 @@ func buildOutputColumns(columnsInfo []tableInfo) []database.Column {
 		if declaredType == "" {
 			declaredType = "text"
 		}
-		widthFromName := len([]rune(column.Name)) + columnNamePad
+		widthFromName := len([]rune(column.Name)) + database.ColumnNamePad
 		columns = append(columns, database.Column{
 			Key:      column.Name,
 			Title:    column.Name,
 			Type:     strings.ToLower(declaredType),
-			MinWidth: max(minColumnWidth, min(maxColumnWidth, widthFromName)),
+			MinWidth: max(database.MinColumnWidth, min(database.MaxColumnWidth, widthFromName)),
 			Order:    i + 1, // preserve table column order (1-based for display)
 		})
 	}
 	return columns
-}
-
-// asString converts a scanned value to a string for display.
-func asString(v any) string {
-	switch t := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return t
-	case []byte:
-		return string(t)
-	case float64:
-		if float64(int64(t)) == t {
-			return strconv.FormatInt(int64(t), 10)
-		}
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case int:
-		return strconv.Itoa(t)
-	case bool:
-		if t {
-			return "true"
-		}
-		return "false"
-	default:
-		return fmt.Sprintf("%v", t)
-	}
-}
-
-// asInt64 converts a scanned value to int64 for cursor use.
-func asInt64(v any) int64 {
-	switch t := v.(type) {
-	case float64:
-		return int64(t)
-	case int64:
-		return t
-	case int:
-		return int64(t)
-	case []byte:
-		n, _ := strconv.ParseInt(strings.TrimSpace(string(t)), 10, 64)
-		return n
-	case string:
-		n, _ := strconv.ParseInt(strings.TrimSpace(t), 10, 64)
-		return n
-	default:
-		return 0
-	}
 }

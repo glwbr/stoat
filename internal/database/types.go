@@ -4,7 +4,8 @@ package database
 type DBMS string
 
 const (
-	DBMSSQLite DBMS = "sqlite"
+	DBMSSQLite   DBMS = "sqlite"
+	DBMSPostgres DBMS = "postgres"
 )
 
 // Config is the configuration for a database connection.

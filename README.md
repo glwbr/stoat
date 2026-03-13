@@ -24,6 +24,28 @@ Stoat sits between those two extremes: a keyboard-driven TUI that gives you real
 
 Built for anyone who lives in the terminal and wants database access that doesn't interrupt their flow.
 
+Built with [Bubbletea](https://github.com/charmbracelet/bubbletea) by Charmbracelet.
+
+## Works with hosted databases
+
+If you use Supabase, Neon, Railway, or Render, paste your connection string and you're in. No browser, no dashboard, no context switch.
+
+```bash
+# Supabase
+stoat --dsn "postgres://postgres:[password]@db.[project].supabase.co:5432/postgres?sslmode=require"
+
+# Neon
+stoat --dsn "postgres://[user]:[password]@[host].neon.tech/[dbname]?sslmode=require"
+
+# Railway
+stoat --dsn "postgres://[user]:[password]@[host].railway.app:5432/[dbname]?sslmode=require"
+
+# Render
+stoat --dsn "postgres://[user]:[password]@[host].render.com:5432/[dbname]?sslmode=require"
+```
+
+Any provider that gives you a `postgres://` connection string works. Including AWS RDS, GCP Cloud SQL, and Azure Database for PostgreSQL.
+
 ## Features
 
 - Schema exploration — browse columns, indexes, constraints, and foreign keys in dedicated tabs without writing `PRAGMA` or `\d`
@@ -38,7 +60,7 @@ Built for anyone who lives in the terminal and wants database access that doesn'
 | Database | Status |
 |----------|--------|
 | SQLite | Supported |
-| PostgreSQL | Planned |
+| PostgreSQL | Supported |
 | MariaDB | Planned |
 
 ## Installation
@@ -52,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.4.0
+curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.5.0
 ```
 
 The script uses `go install` and puts the `stoat` binary in **$GOBIN** (default `$HOME/go/bin`). Ensure that directory is in your `PATH`.
@@ -75,10 +97,14 @@ Then add `$HOME/.local/bin` to your `PATH` if needed.
 ## Quick start
 
 ```bash
+# SQLite
 stoat --db path/to/database.sqlite
+
+# PostgreSQL
+stoat --dsn "postgres://user:password@host:5432/dbname?sslmode=disable"
 ```
 
-Pass a database file to open it on startup. If no file is given, Stoat starts without a database loaded.
+Pass a database file or connection string to open it on startup. If neither is given, Stoat starts without a database loaded.
 
 ### Development commands
 
@@ -111,6 +137,7 @@ make lint     # run golangci-lint
 | `y` | Copy value from active cell to clipboard | Table |
 | `Ctrl+S` | Run query | Query box |
 | `Ctrl+N` | Expand saved query (type `@Name` then Ctrl+N to insert) | Query box |
+| `Ctrl+L` | Clear query | Query box |
 
 The options bar at the bottom shows shortcuts for the currently focused pane (sidebar, filter, table, or query). When focus is clear, it shows `q` to quit.
 

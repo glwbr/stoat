@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.1
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.1
+      - name: Run Tests 
+        run: make test 
+      - name: Run Build
+        run: make build

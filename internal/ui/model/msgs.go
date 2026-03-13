@@ -10,6 +10,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/jxdones/stoat/internal/database"
+	"github.com/jxdones/stoat/internal/database/provider"
 	"github.com/jxdones/stoat/internal/ui/datasource"
 )
 
@@ -79,6 +80,23 @@ type ForeignKeysLoadedMsg struct {
 // CopyDoneMsg is sent when the copy operation is done.
 type CopyDoneMsg struct {
 	Err error
+}
+
+// ConnectingMsg is sent immediately when an async connection is requested.
+// Handling it in Update allows the UI to render "Connecting…" before the
+// blocking provider.FromConfig call begins.
+type ConnectingMsg struct {
+	cfg database.Config
+}
+
+// ConnectedMsg is sent when the async database connection succeeds.
+type ConnectedMsg struct {
+	source datasource.DataSource
+}
+
+// ConnectionFailedMsg is sent when the async database connection fails.
+type ConnectionFailedMsg struct {
+	err error
 }
 
 // LoadDatabasesCmd returns a command that loads the list of databases from the
@@ -226,5 +244,17 @@ func CopyToClipboardCmd(value string) tea.Cmd {
 	return func() tea.Msg {
 		err := clipboard.WriteAll(value)
 		return CopyDoneMsg{Err: err}
+	}
+}
+
+// ConnectCmd establishes a database connection asynchronously using the given
+// config. On success it sends ConnectedMsg; on failure ConnectionFailedMsg.
+func ConnectCmd(cfg database.Config) tea.Cmd {
+	return func() tea.Msg {
+		conn, err := provider.FromConfig(cfg)
+		if err != nil {
+			return ConnectionFailedMsg{err: err}
+		}
+		return ConnectedMsg{source: datasource.FromConnection(conn)}
 	}
 }

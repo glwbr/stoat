@@ -23,8 +23,10 @@ func (m Model) handleDatabasesLoaded(msg DatabasesLoadedMsg) (tea.Model, tea.Cmd
 	m.sidebar.SetDatabases(msg.Databases)
 	if len(msg.Databases) > 0 {
 		m.sidebar.OpenSelectedDatabase()
+		m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
 		return m, LoadTablesCmd(m.source, msg.Databases[0])
 	}
+	m.statusbar.SetStatus(" Ready", statusbar.Info)
 	return m, nil
 }
 
@@ -35,6 +37,7 @@ func (m Model) handleTablesLoaded(msg TablesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	m.sidebar.SetTables(msg.Database, msg.Tables)
+	m.statusbar.SetStatus(" Ready", statusbar.Info)
 	return m, nil
 }
 
@@ -46,11 +49,16 @@ func (m Model) handleRowsLoaded(msg RowsLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.viewingQueryResult = false
 	m.queryResultPreview = ""
+	m.statusbar.SetStatus(" Ready", statusbar.Info)
 	pr := msg.Result
 	m.applyPageResult(m.paging.requestAfter, pr.NextAfter, pr.HasMore)
 	if len(pr.Result.Columns) > 0 {
 		m.table.SetColumns(dbColumnsToTable(pr.Result.Columns))
 		m.tableSchema.columns = pr.Result.Columns
+
+		if m.tabs.ActiveTab() == "Columns" {
+			m.schemaTable = table.New(schemaColumnsToTable(m.tableSchema.columns))
+		}
 	}
 	m.table.SetRows(dbRowsToTable(pr.Result.Rows))
 	m.applyViewState()
@@ -70,6 +78,11 @@ func (m Model) handleTableConstraintsLoaded(msg TableConstraintsLoadedMsg) (tea.
 	m.tablePKTarget = msg.Target
 	m.tableSchema.constraints = msg.Constraints
 	m.tablePKColumns = nil
+
+	if m.tabs.ActiveTab() == "Constraints" {
+		m.schemaTable = table.New(schemaConstraintsToTable(m.tableSchema.constraints))
+	}
+
 	for _, c := range msg.Constraints {
 		if c.Type == "PRIMARY KEY" && len(c.Columns) > 0 {
 			m.tablePKColumns = append([]string(nil), c.Columns...)
@@ -85,6 +98,11 @@ func (m Model) handleIndexesLoaded(msg IndexesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	target := database.DatabaseTarget{Database: m.sidebar.EffectiveDB(), Table: m.sidebar.SelectedTable()}
+
+	if m.tabs.ActiveTab() == "Indexes" {
+		m.schemaTable = table.New(schemaIndexesToTable(msg.Indexes))
+	}
+
 	if msg.Target == target {
 		m.tableSchema.indexes = msg.Indexes
 	}
@@ -96,6 +114,7 @@ func (m Model) handleForeignKeysLoaded(msg ForeignKeysLoadedMsg) (tea.Model, tea
 	if msg.Err != nil {
 		return m, nil
 	}
+
 	target := database.DatabaseTarget{Database: m.sidebar.EffectiveDB(), Table: m.sidebar.SelectedTable()}
 	if msg.Target == target {
 		m.tableSchema.foreignKeys = msg.ForeignKeys
@@ -360,6 +379,7 @@ func (m Model) handlePagingShortcut(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bo
 	if msg.String() == "ctrl+n" && m.paging.currentHasMore {
 		m.setPendingPageNav(pageNavNext)
 		m.paging.requestAfter = m.paging.currentAfter
+		m.statusbar.SetStatus(" Loading page…", statusbar.Info)
 		return m, LoadTableRowsCmd(m.source, target, database.PageRequest{
 			Limit: DefaultPageLimit,
 			After: m.paging.currentAfter,
@@ -369,6 +389,7 @@ func (m Model) handlePagingShortcut(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bo
 		prevCursor := m.paging.afterStack[len(m.paging.afterStack)-2]
 		m.setPendingPageNav(pageNavPrev)
 		m.paging.requestAfter = prevCursor
+		m.statusbar.SetStatus(" Loading page…", statusbar.Info)
 		return m, LoadTableRowsCmd(m.source, target, database.PageRequest{
 			Limit: DefaultPageLimit,
 			After: prevCursor,
@@ -390,6 +411,7 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.applyViewState()
 				if m.HasConnection() {
 					if db := m.sidebar.EffectiveDB(); db != "" {
+						m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
 						return m, LoadTablesCmd(m.source, db)
 					}
 				}
@@ -421,6 +443,7 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Limit: DefaultPageLimit,
 				After: "",
 			}
+			m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
 			return m, LoadTableRowsCmd(m.source, target, page)
 		}
 	case FocusQuerybox:
@@ -486,6 +509,7 @@ func (m Model) handleApplyFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 		m.paging.requestAfter = ""
 		target := database.DatabaseTarget{Database: db, Table: tableName}
 		page := database.PageRequest{Limit: DefaultPageLimit, After: ""}
+		m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
 		return m, LoadTableRowsCmd(m.source, target, page), true
 	}
 
@@ -511,6 +535,7 @@ func (m Model) handleReload(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	target := database.DatabaseTarget{Database: db, Table: tableName}
 	page := database.PageRequest{Limit: DefaultPageLimit, After: ""}
+	m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
 	return m, LoadTableRowsCmd(m.source, target, page)
 }
 
@@ -603,4 +628,25 @@ func queryPreviewForHeader(query string) string {
 		return line
 	}
 	return line[:queryPreviewMaxLen-1] + "…"
+}
+
+// handleConnecting sets the status bar to "Connecting…" and fires the async
+// ConnectCmd. The extra message hop gives the UI one render cycle to paint
+// the status before the blocking provider call starts.
+func (m Model) handleConnecting(msg ConnectingMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.SetStatus(" Connecting to "+msg.cfg.Name+"…", statusbar.Info)
+	return m, ConnectCmd(msg.cfg)
+}
+
+// handleConnected stores the established data source and begins loading databases.
+func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
+	m.source = msg.source
+	m.statusbar.SetStatus(" Loading databases…", statusbar.Info)
+	return m, LoadDatabasesCmd(m.source)
+}
+
+// handleConnectionFailed shows a sticky error in the status bar.
+func (m Model) handleConnectionFailed(msg ConnectionFailedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.SetStatus(" Connection failed: "+msg.err.Error(), statusbar.Error)
+	return m, nil
 }

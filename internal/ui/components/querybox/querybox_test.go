@@ -326,7 +326,7 @@ func TestHelpBindings(t *testing.T) {
 		},
 		{
 			name:     "clear_query_binding",
-			wantKeys: []string{"ctrl+k"},
+			wantKeys: []string{"ctrl+l"},
 			wantHelp: "clear query",
 		},
 	}

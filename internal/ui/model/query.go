@@ -62,7 +62,8 @@ func BuildUpdateQueryFromCell(table, setColumn, setColType, setValue string, pkC
 		}
 	}
 	if whereClause == "" {
-		whereClause = fmt.Sprintf("WHERE %s = %s;", col, setLiteral)
+		oldLiteral := formatSQLValue(setColType, row[setColumn])
+		whereClause = fmt.Sprintf("WHERE %s = %s;", col, oldLiteral)
 	}
 
 	lines := []string{
