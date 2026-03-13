@@ -14,7 +14,7 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 echo "Installing stoat@${VERSION}..."
-go install "${REPO}@${VERSION}"
+go install "${REPO}/cmd/stoat@${VERSION}"
 
 if [ -x "${BINDIR}/stoat" ]; then
   echo "Stoat installed to ${BINDIR}/stoat"
