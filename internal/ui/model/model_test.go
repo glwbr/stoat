@@ -75,6 +75,10 @@ func (m mockDataSource) Close() error {
 	return nil
 }
 
+func (m mockDataSource) DefaultDatabase(ctx context.Context) (string, error) {
+	return "main", nil
+}
+
 func TestView_Smoke(t *testing.T) {
 	m := New()
 	m.view.width = 80

@@ -13,10 +13,20 @@ import (
 	"github.com/jxdones/stoat/internal/ui/model"
 )
 
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z".
+var version = "dev"
+
 func main() {
 	dbPath := flag.String("db", "", "path to SQLite database file (e.g. ./mydb.sqlite)")
 	dbDSN := flag.String("dsn", "", "PostgreSQL connection string (e.g. postgres://user:password@host:port/database)")
+	debug := flag.Bool("debug", false, "write per-call timings to ~/.stoat/debug.log")
+	ver := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *ver {
+		fmt.Println(version)
+		return
+	}
 
 	m := model.New()
 	if *dbPath != "" {
@@ -39,6 +49,24 @@ func main() {
 		os.Exit(1)
 	}
 	m.SetConfig(cfg)
+
+	if *debug {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "debug log: %v\n", err)
+			os.Exit(1)
+		}
+		out, err := os.OpenFile(
+			filepath.Join(home, ".stoat", "debug.log"),
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+			0644,
+		)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "debug log: %v\n", err)
+			os.Exit(1)
+		}
+		m.SetDebugOutput(out)
+	}
 
 	program := tea.NewProgram(m)
 	app, err := program.Run()

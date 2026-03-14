@@ -7,10 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-14
+
 ### Added
 
 - **Open in `$EDITOR`** (`Ctrl+E`). Press `Ctrl+E` from anywhere to open your `$EDITOR` with a SQL comment template. Save and close to run the query immediately — useful for writing multi-line DDL or complex statements that don't fit the query box.
 - **Postgres integration tests** using `testcontainers-go`. A real Postgres instance is spun up in CI to test the full `Connection` interface: databases, tables, rows, indexes, constraints, and foreign keys.
+- **Debug timing log** (`--debug`). Pass `--debug` to write per-call timings for every database operation to `~/.stoat/debug.log`. Useful for diagnosing performance on hosted Postgres providers.
+- **Version flag** (`--version`). Print the current version and exit.
+
+### Changed
+
+- **Postgres startup is now faster.** After connecting, the schema list and table list load in parallel instead of sequentially, saving one full round-trip on every startup.
+- **Sidebar shows the default schema instantly on connect.** `public` appears in the sidebar as soon as the connection is established — before any network calls complete — so the user always has context while data is loading.
+- **Postgres `Indexes` query rewritten** to a single JOIN against `pg_catalog`. Eliminated an N+1 pattern (one query per index) that was causing 2–5s load times on hosted providers with many indexes.
+- **Postgres `ForeignKeys` query rewritten** from `information_schema` to `pg_catalog.pg_constraint`. Dropped from 1–5s to ~200ms on hosted providers.
+- **Postgres `Constraints` query rewritten** from two sequential `information_schema` queries to a single `pg_catalog` UNION ALL query. One round-trip instead of two.
+
+### Fixed
+
+- Sidebar jumping to the first schema alphabetically (e.g. `auth`) after the full schema list loaded, discarding the active `public` selection.
+- Table cursor not resetting to the top when switching to a different table or loading a new page.
+- Stale table data remaining visible when switching to a database that has no tables. The table view now clears and shows the "Select a table" placeholder.
 
 ## [0.5.0] - 2026-03-13
 

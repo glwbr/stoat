@@ -1,6 +1,7 @@
 package model
 
 import (
+	"io"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -70,6 +71,8 @@ type Model struct {
 	tablePKTarget  database.DatabaseTarget
 
 	queryResultPreview string // truncated one-line preview of the last run query for the header
+
+	debugOutput io.Writer // for timing debug output
 }
 
 // detailRows returns the number of rows the detail section should occupy.
@@ -206,6 +209,11 @@ func (m *Model) SetConfig(config config.Config) {
 		m.applyViewState()
 	}
 	m.savedQueries = toModelSavedQueries(config.SavedQueries)
+}
+
+// SetDebugOutput sets the output writer for timing debug output.
+func (m *Model) SetDebugOutput(out io.Writer) {
+	m.debugOutput = out
 }
 
 // toModelSavedQueries converts a list of config.SavedQuery to a list of Model.SavedQuery.

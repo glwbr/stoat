@@ -424,9 +424,9 @@ func TestHandleConnected(t *testing.T) {
 		wantCmd        bool
 	}{
 		{
-			name:           "sets_source_and_triggers_database_load",
+			name:           "sets_source_and_triggers_parallel_load",
 			wantSourceSet:  true,
-			wantStatusText: "Loading databases",
+			wantStatusText: "Loading tables",
 			wantCmd:        true,
 		},
 	}
@@ -462,10 +462,10 @@ func TestHandleDatabasesLoaded(t *testing.T) {
 			wantCmd:        false,
 		},
 		{
-			name:           "non_empty_list_triggers_table_load",
+			name:           "non_empty_list_populates_sidebar",
 			databases:      []string{"mydb"},
-			wantStatusText: "Loading tables",
-			wantCmd:        true,
+			wantStatusText: "Ready",
+			wantCmd:        false,
 		},
 	}
 	for _, tt := range tests {

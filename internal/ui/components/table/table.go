@@ -223,6 +223,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// GotoTop moves the cursor to the top of the table.
+func (m *Model) GotoTop() {
+	m.rowIndex = 0
+	m.colIndex = 0
+	m.ensureVisibleRow()
+}
+
 // HelpBindings returns the key bindings for the table.
 func HelpBindings() []key.Binding {
 	return []key.Binding{

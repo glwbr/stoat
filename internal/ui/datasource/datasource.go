@@ -15,6 +15,7 @@ type DataSource interface {
 	Indexes(ctx context.Context, target database.DatabaseTarget) ([]database.Index, error)
 	Constraints(ctx context.Context, target database.DatabaseTarget) ([]database.Constraint, error)
 	ForeignKeys(ctx context.Context, target database.DatabaseTarget) ([]database.ForeignKey, error)
+	DefaultDatabase(ctx context.Context) (string, error)
 	Close() error
 }
 
@@ -69,4 +70,9 @@ func (s *connectionSource) ForeignKeys(ctx context.Context, target database.Data
 // Close closes the connection.
 func (s *connectionSource) Close() error {
 	return s.conn.Close()
+}
+
+// DefaultDatabase returns the default database name.
+func (s *connectionSource) DefaultDatabase(ctx context.Context) (string, error) {
+	return s.conn.DefaultDatabase(ctx)
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jxdones/stoat/internal/ui/components/sidebar"
 	"github.com/jxdones/stoat/internal/ui/components/statusbar"
 	"github.com/jxdones/stoat/internal/ui/components/table"
+	"github.com/jxdones/stoat/internal/ui/datasource"
 )
 
 // handleDatabasesLoaded handles the DatabasesLoadedMsg and updates the sidebar.
@@ -20,13 +22,14 @@ func (m Model) handleDatabasesLoaded(msg DatabasesLoadedMsg) (tea.Model, tea.Cmd
 		cmd := m.statusbar.SetStatusWithTTL(" Databases: "+msg.Err.Error(), statusbar.Error, 4*time.Second)
 		return m, cmd
 	}
+	activeDB := m.sidebar.EffectiveDB()
 	m.sidebar.SetDatabases(msg.Databases)
 	if len(msg.Databases) > 0 {
+		if activeDB != "" {
+			m.sidebar.SelectDatabase(activeDB)
+		}
 		m.sidebar.OpenSelectedDatabase()
-		m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
-		return m, LoadTablesCmd(m.source, msg.Databases[0])
 	}
-	m.statusbar.SetStatus(" Ready", statusbar.Info)
 	return m, nil
 }
 
@@ -37,6 +40,10 @@ func (m Model) handleTablesLoaded(msg TablesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	m.sidebar.SetTables(msg.Database, msg.Tables)
+	if len(msg.Tables) == 0 {
+		m.table.SetColumns(nil)
+		m.table.SetRows(nil)
+	}
 	m.statusbar.SetStatus(" Ready", statusbar.Info)
 	return m, nil
 }
@@ -61,6 +68,7 @@ func (m Model) handleRowsLoaded(msg RowsLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.table.SetRows(dbRowsToTable(pr.Result.Rows))
+	m.table.GotoTop()
 	m.applyViewState()
 	target := database.DatabaseTarget{Database: m.sidebar.EffectiveDB(), Table: m.sidebar.SelectedTable()}
 	return m, tea.Batch(
@@ -641,10 +649,27 @@ func (m Model) handleConnecting(msg ConnectingMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleConnected stores the established data source and begins loading databases.
+// It immediately populates the sidebar with the default database so the user
+// sees something as soon as the connection is established, without waiting for
+// the full Databases() round-trip to complete. The real schema list loads in
+// parallel and replaces this placeholder when it arrives.
 func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
 	m.source = msg.source
-	m.statusbar.SetStatus(" Loading databases…", statusbar.Info)
-	return m, LoadDatabasesCmd(m.source)
+	if m.debugOutput != nil {
+		m.source = datasource.WithTiming(m.source, m.debugOutput)
+	}
+	defaultDB, err := m.source.DefaultDatabase(context.Background())
+	if err != nil || defaultDB == "" {
+		m.statusbar.SetStatus(" Loading databases…", statusbar.Info)
+		return m, LoadDatabasesCmd(m.source)
+	}
+	m.sidebar.SetDatabases([]string{defaultDB})
+	m.sidebar.OpenSelectedDatabase()
+	m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
+	return m, tea.Batch(
+		LoadDatabasesCmd(m.source),
+		LoadTablesCmd(m.source, defaultDB),
+	)
 }
 
 // handleConnectionFailed shows a sticky error in the status bar.

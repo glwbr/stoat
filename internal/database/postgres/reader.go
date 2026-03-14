@@ -34,12 +34,6 @@ type rowsPagePlan struct {
 	afterValue int64
 }
 
-// indexListRow holds one row frompg_catalog.pg_indexes.
-type indexListRow struct {
-	Name   string
-	Unique bool
-}
-
 // Schemas returns the list of schemas in the PostgreSQL database.
 func Schemas(ctx context.Context, db *sql.DB) ([]string, error) {
 	if db == nil {
@@ -248,32 +242,98 @@ func Constraints(ctx context.Context, db *sql.DB, target database.DatabaseTarget
 		return nil, database.ErrNoConnection
 	}
 
-	columnConstraints, err := columnConstraints(ctx, db, target.Database, target.Table)
-	if err != nil {
-		return nil, err
-	}
-	namedConstraints, err := namedConstraints(ctx, db, target.Database, target.Table)
-	if err != nil {
-		return nil, err
-	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			con.conname AS constraint_name,
+			CASE con.contype WHEN 'p' THEN 'PRIMARY KEY' WHEN 'u' THEN 'UNIQUE' END AS constraint_type,
+			a.attname AS column_name,
+			NULL::text AS detail,
+			CASE con.contype WHEN 'p' THEN 0 WHEN 'u' THEN 2 END AS sort_order
+		FROM pg_catalog.pg_constraint con
+		JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_catalog.pg_attribute a
+			ON a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey)
+		WHERE c.relname = $1 AND n.nspname = $2
+			AND con.contype IN ('p', 'u')
 
-	primaryKeyConstraints := make([]database.Constraint, 0, len(namedConstraints))
-	uniqueConstraints := make([]database.Constraint, 0, len(namedConstraints))
-	for _, c := range namedConstraints {
-		switch strings.ToUpper(strings.TrimSpace(c.Type)) {
-		case "PRIMARY KEY":
-			primaryKeyConstraints = append(primaryKeyConstraints, c)
-		case "UNIQUE":
-			uniqueConstraints = append(uniqueConstraints, c)
-		default:
+		UNION ALL
+
+		SELECT
+			'NOT NULL ' || a.attname,
+			'NOT NULL',
+			a.attname,
+			NULL::text,
+			1
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1 AND n.nspname = $2
+			AND a.attnotnull = true AND a.attnum > 0 AND NOT a.attisdropped
+
+		UNION ALL
+
+		SELECT
+			'DEFAULT ' || a.attname,
+			'DEFAULT',
+			a.attname,
+			pg_get_expr(ad.adbin, ad.adrelid),
+			1
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_catalog.pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+		WHERE c.relname = $1 AND n.nspname = $2
+			AND a.attnum > 0 AND NOT a.attisdropped
+		ORDER BY sort_order, constraint_name, column_name;
+	`, target.Table, target.Database)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	constraintsByName := make(map[string]*database.Constraint)
+	order := make([]string, 0)
+	for rows.Next() {
+		var (
+			constraintName string
+			constraintType string
+			columnName     string
+			detail         sql.NullString
+			sortOrder      int
+		)
+		if err := rows.Scan(&constraintName, &constraintType, &columnName, &detail, &sortOrder); err != nil {
+			return nil, err
+		}
+		constraintName = strings.TrimSpace(constraintName)
+		columnName = strings.TrimSpace(columnName)
+		if constraintName == "" || columnName == "" {
 			continue
 		}
+		c, ok := constraintsByName[constraintName]
+		if !ok {
+			c = &database.Constraint{
+				Name: constraintName,
+				Type: constraintType,
+			}
+			if detail.Valid && strings.TrimSpace(detail.String) != "" {
+				c.Detail = detail.String
+			}
+			constraintsByName[constraintName] = c
+			order = append(order, constraintName)
+		}
+		c.Columns = append(c.Columns, columnName)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	result := make([]database.Constraint, 0, len(primaryKeyConstraints)+len(columnConstraints)+len(uniqueConstraints))
-	result = append(result, primaryKeyConstraints...)
-	result = append(result, columnConstraints...)
-	result = append(result, uniqueConstraints...)
+	result := make([]database.Constraint, 0, len(order))
+	for _, name := range order {
+		if c, ok := constraintsByName[name]; ok {
+			result = append(result, *c)
+		}
+	}
 	return result, nil
 }
 
@@ -285,25 +345,25 @@ func ForeignKeys(ctx context.Context, db *sql.DB, target database.DatabaseTarget
 
 	rows, err := db.QueryContext(ctx, `
 		SELECT
-			rc.constraint_name,
-			kcu.column_name,
-			ccu.table_name AS ref_table,
-			ccu.column_name AS ref_column,
-			rc.update_rule,
-			rc.delete_rule
-		FROM information_schema.referential_constraints rc
-		JOIN information_schema.key_column_usage kcu
-			ON  rc.constraint_catalog = kcu.constraint_catalog
-			AND rc.constraint_schema  = kcu.constraint_schema
-			AND rc.constraint_name    = kcu.constraint_name
-		JOIN information_schema.constraint_column_usage ccu
-			ON  rc.unique_constraint_catalog = ccu.constraint_catalog
-			AND rc.unique_constraint_schema  = ccu.constraint_schema
-			AND rc.unique_constraint_name    = ccu.constraint_name
-		WHERE kcu.table_schema = $1
-			AND kcu.table_name  = $2
-		ORDER BY kcu.ordinal_position ASC;
-	`, target.Database, target.Table)
+			c.conname AS constraint_name,
+			a.attname AS column_name,
+			ref.relname AS ref_table,
+			ra.attname AS ref_column,
+			c.confupdtype,
+			c.confdeltype
+		FROM pg_catalog.pg_constraint c
+		JOIN pg_catalog.pg_class cl ON cl.oid = c.conrelid
+		JOIN pg_catalog.pg_class ref ON ref.oid = c.confrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace
+		JOIN pg_catalog.pg_attribute a
+			ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+		JOIN pg_catalog.pg_attribute ra
+			ON ra.attrelid = c.confrelid AND ra.attnum = ANY(c.confkey)
+		WHERE cl.relname = $1
+			AND n.nspname = $2
+			AND c.contype = 'f'
+		ORDER BY c.conname;
+	`, target.Table, target.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -327,6 +387,8 @@ func ForeignKeys(ctx context.Context, db *sql.DB, target database.DatabaseTarget
 		column = strings.TrimSpace(column)
 		refTable = strings.TrimSpace(refTable)
 		refColumn = strings.TrimSpace(refColumn)
+		onUpdateAction = foreignKeyAction(strings.TrimSpace(onUpdateAction))
+		onDeleteAction = foreignKeyAction(strings.TrimSpace(onDeleteAction))
 
 		if column == "" || refTable == "" || refColumn == "" {
 			continue
@@ -353,25 +415,65 @@ func Indexes(ctx context.Context, db *sql.DB, target database.DatabaseTarget) ([
 		return nil, database.ErrNoConnection
 	}
 
-	indexRows, err := indexListRows(ctx, db, target.Database, target.Table)
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			ic.relname AS index_name,
+			ix.indisunique AS is_unique,
+			a.attname AS column_name,
+			a.attnum
+		FROM pg_catalog.pg_index ix
+		JOIN pg_catalog.pg_class c  ON c.oid = ix.indrelid
+		JOIN pg_catalog.pg_class ic ON ic.oid = ix.indexrelid
+		JOIN pg_catalog.pg_attribute a
+			ON a.attrelid = c.oid
+			AND a.attnum = ANY(ix.indkey)
+			AND a.attnum > 0
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relname = $1
+			AND n.nspname = $2
+		ORDER BY ic.relname, a.attnum ASC;
+	`, target.Table, target.Database)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	result := make([]database.Index, 0, len(indexRows))
-	for _, row := range indexRows {
-		if strings.TrimSpace(row.Name) == "" {
-			continue
-		}
-		columns, err := indexColumns(ctx, db, target.Table, row.Name)
-		if err != nil {
+	indexByName := make(map[string]*database.Index)
+	order := make([]string, 0)
+	for rows.Next() {
+		var (
+			indexName  string
+			isUnique   bool
+			columnName string
+			attnum     int64
+		)
+		if err := rows.Scan(&indexName, &isUnique, &columnName, &attnum); err != nil {
 			return nil, err
 		}
-		result = append(result, database.Index{
-			Name:    row.Name,
-			Columns: columns,
-			Unique:  row.Unique,
-		})
+		indexName = strings.TrimSpace(indexName)
+		columnName = strings.TrimSpace(columnName)
+		if indexName == "" || columnName == "" {
+			continue
+		}
+
+		index, ok := indexByName[indexName]
+		if !ok {
+			index = &database.Index{
+				Name:   indexName,
+				Unique: isUnique,
+			}
+			indexByName[indexName] = index
+			order = append(order, indexName)
+		}
+		index.Columns = append(index.Columns, columnName)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	result := make([]database.Index, 0, len(order))
+	for _, name := range order {
+		result = append(result, *indexByName[name])
 	}
 	return result, nil
 }
@@ -606,197 +708,20 @@ func buildOutputColumns(columnsInfo []columnInfo) []database.Column {
 	return columns
 }
 
-// columnConstraints returns the list of constraints for the given table.
-func columnConstraints(ctx context.Context, db *sql.DB, schema, table string) ([]database.Constraint, error) {
-	rows, err := db.QueryContext(ctx, `
-	SELECT column_name, is_nullable, column_default
-	FROM information_schema.columns
-	WHERE table_schema = $1
-		AND table_name = $2
-	ORDER BY ordinal_position ASC;
-`, schema, table)
-	if err != nil {
-		return nil, err
+// foreignKeyAction converts the PostgreSQL foreign key action to a readable string.
+func foreignKeyAction(action string) string {
+	switch action {
+	case "a":
+		return "NO ACTION"
+	case "r":
+		return "RESTRICT"
+	case "c":
+		return "CASCADE"
+	case "n":
+		return "SET NULL"
+	case "d":
+		return "SET DEFAULT"
+	default:
+		return action
 	}
-	defer rows.Close()
-
-	result := make([]database.Constraint, 0)
-	for rows.Next() {
-		var (
-			columnName    string
-			isNullable    sql.NullString
-			columnDefault sql.NullString
-		)
-		if err := rows.Scan(&columnName, &isNullable, &columnDefault); err != nil {
-			return nil, err
-		}
-		columnName = strings.TrimSpace(columnName)
-		if columnName == "" {
-			continue
-		}
-
-		nullable := true
-		if isNullable.Valid && strings.EqualFold(strings.TrimSpace(isNullable.String), "NO") {
-			nullable = false
-		}
-		if !nullable {
-			result = append(result, database.Constraint{
-				Name:    "NOT NULL " + columnName,
-				Type:    "NOT NULL",
-				Columns: []string{columnName},
-			})
-		}
-
-		if columnDefault.Valid && strings.TrimSpace(columnDefault.String) != "" {
-			result = append(result, database.Constraint{
-				Name:    "DEFAULT " + columnName,
-				Type:    "DEFAULT",
-				Columns: []string{columnName},
-				Detail:  columnDefault.String,
-			})
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// namedConstraints returns PRIMARY KEY and UNIQUE constraints for the given table,
-// including their column lists in ordinal order.
-func namedConstraints(ctx context.Context, db *sql.DB, schema, table string) ([]database.Constraint, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT
-			tc.constraint_name,
-			tc.constraint_type,
-			kcu.column_name
-		FROM information_schema.table_constraints AS tc
-		JOIN information_schema.key_column_usage AS kcu
-			ON  tc.constraint_schema = kcu.constraint_schema
-			AND tc.constraint_name   = kcu.constraint_name
-			AND tc.table_schema      = kcu.table_schema
-			AND tc.table_name        = kcu.table_name
-		WHERE
-			tc.table_schema = $1
-			AND tc.table_name = $2
-			AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
-		ORDER BY
-			tc.constraint_name,
-			kcu.ordinal_position ASC;
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	constraintsByName := make(map[string]*database.Constraint)
-	order := make([]string, 0)
-	for rows.Next() {
-		var (
-			constraintName string
-			constraintType string
-			columnName     string
-		)
-		if err := rows.Scan(&constraintName, &constraintType, &columnName); err != nil {
-			return nil, err
-		}
-		constraintName = strings.TrimSpace(constraintName)
-		columnName = strings.TrimSpace(columnName)
-		if constraintName == "" || columnName == "" {
-			continue
-		}
-
-		c, ok := constraintsByName[constraintName]
-		if !ok {
-			c = &database.Constraint{
-				Name: constraintName,
-				Type: constraintType,
-			}
-			constraintsByName[constraintName] = c
-			order = append(order, constraintName)
-		}
-		c.Columns = append(c.Columns, columnName)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	result := make([]database.Constraint, 0, len(order))
-	for _, name := range order {
-		if c, ok := constraintsByName[name]; ok {
-			result = append(result, *c)
-		}
-	}
-	return result, nil
-}
-
-// indexListRows returns the list of indexes for the given table.
-func indexListRows(ctx context.Context, db *sql.DB, schema, table string) ([]indexListRow, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT 
-			indexname, indexdef
-  		FROM pg_catalog.pg_indexes
-  		WHERE schemaname = $1
-   	 	AND tablename = $2;
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := make([]indexListRow, 0)
-	for rows.Next() {
-		var (
-			name     string
-			indexDef string
-		)
-		if err := rows.Scan(&name, &indexDef); err != nil {
-			return nil, err
-		}
-
-		unique := strings.Contains(indexDef, "UNIQUE")
-		result = append(result, indexListRow{
-			Name:   name,
-			Unique: unique,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// indexColumns returns the column names of the given index in order.
-func indexColumns(ctx context.Context, db *sql.DB, table, indexName string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT a.attname
-  		FROM pg_catalog.pg_index i
-  		JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
-  		JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
-  		JOIN pg_catalog.pg_attribute a
-      		ON a.attrelid = c.oid
-      		AND a.attnum = ANY(i.indkey)
-		WHERE c.relname = $1
-			AND ic.relname = $2
-			AND a.attnum > 0
-		ORDER BY a.attnum ASC;
-  `, table, indexName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := make([]string, 0)
-	for rows.Next() {
-		var column string
-		if err := rows.Scan(&column); err != nil {
-			return nil, err
-		}
-		result = append(result, column)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
 }

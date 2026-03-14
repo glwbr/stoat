@@ -629,3 +629,17 @@ func (m *Model) MoveToBottom() {
 	}
 	m.clamp()
 }
+
+// SelectDatabase sets the selected database to the one with the given name.
+// If the name is not found, the selection is unchanged.
+func (m *Model) SelectDatabase(name string) {
+	if name == "" {
+		return
+	}
+	for i, db := range m.databases {
+		if db == name {
+			m.selectedDB = i
+			return
+		}
+	}
+}

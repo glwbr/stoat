@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"strings"
 
 	"github.com/jxdones/stoat/internal/database"
@@ -88,4 +89,12 @@ func (c *connection) Constraints(ctx context.Context, target database.DatabaseTa
 // ForeignKeys returns the list of foreign keys on the given table.
 func (c *connection) ForeignKeys(ctx context.Context, target database.DatabaseTarget) ([]database.ForeignKey, error) {
 	return ForeignKeys(ctx, c.db, target)
+}
+
+// DefaultDatabase returns the default database name.
+func (c *connection) DefaultDatabase(_ context.Context) (string, error) {
+	if c.name != "" {
+		return c.name, nil
+	}
+	return filepath.Base(c.path), nil
 }

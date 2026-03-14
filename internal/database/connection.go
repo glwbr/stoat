@@ -10,5 +10,6 @@ type Connection interface {
 	Indexes(ctx context.Context, target DatabaseTarget) ([]Index, error)
 	Constraints(ctx context.Context, target DatabaseTarget) ([]Constraint, error)
 	ForeignKeys(ctx context.Context, target DatabaseTarget) ([]ForeignKey, error)
+	DefaultDatabase(ctx context.Context) (string, error)
 	Close() error
 }

@@ -93,3 +93,8 @@ func (c *connection) Constraints(ctx context.Context, target database.DatabaseTa
 func (c *connection) ForeignKeys(ctx context.Context, target database.DatabaseTarget) ([]database.ForeignKey, error) {
 	return ForeignKeys(ctx, c.db, target)
 }
+
+// DefaultDatabase returns the default database name.
+func (c *connection) DefaultDatabase(ctx context.Context) (string, error) {
+	return "public", nil
+}

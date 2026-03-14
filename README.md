@@ -32,16 +32,16 @@ If you use Supabase, Neon, Railway, or Render, paste your connection string and 
 
 ```bash
 # Supabase
-stoat --dsn "postgres://postgres:[password]@db.[project].supabase.co:5432/postgres?sslmode=require"
+stoat --dsn "postgres://postgres:[password]@db.[project].supabase.co:[port]/postgres?sslmode=require"
 
 # Neon
 stoat --dsn "postgres://[user]:[password]@[host].neon.tech/[dbname]?sslmode=require"
 
 # Railway
-stoat --dsn "postgres://[user]:[password]@[host].railway.app:5432/[dbname]?sslmode=require"
+stoat --dsn "postgres://[user]:[password]@[host].railway.app:[port]/[dbname]?sslmode=require"
 
 # Render
-stoat --dsn "postgres://[user]:[password]@[host].render.com:5432/[dbname]?sslmode=require"
+stoat --dsn "postgres://[user]:[password]@[host].render.com:[port]/[dbname]?sslmode=require"
 ```
 
 Any provider that gives you a `postgres://` connection string works. Including AWS RDS, GCP Cloud SQL, and Azure Database for PostgreSQL.
@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.5.0
+curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.5.1
 ```
 
 The script uses `go install` and puts the `stoat` binary in **$GOBIN** (default `$HOME/go/bin`). Ensure that directory is in your `PATH`.
@@ -102,6 +102,12 @@ stoat --db path/to/database.sqlite
 
 # PostgreSQL
 stoat --dsn "postgres://user:password@host:5432/dbname?sslmode=disable"
+
+# Print version
+stoat --version
+
+# Write per-call timings to ~/.stoat/debug.log
+stoat --db path/to/database.sqlite --debug
 ```
 
 Pass a database file or connection string to open it on startup. If neither is given, Stoat starts without a database loaded.
