@@ -27,12 +27,12 @@ func WithTiming(source DataSource, out io.Writer) DataSource {
 //
 //	defer t.logTiming("MethodName", time.Now())
 func (t *timingDataSource) logTiming(method string, start time.Time) {
-	fmt.Fprintf(t.out, "%s\t%s\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, time.Since(start))
+	_, _ = fmt.Fprintf(t.out, "%s\t%s\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, time.Since(start))
 }
 
 // logTimingWithTarget writes a timing line to out with the target included.
 func (t *timingDataSource) logTimingWithTarget(method, target string, start time.Time) {
-	fmt.Fprintf(t.out, "%s\t%s(%s)\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, target, time.Since(start))
+	_, _ = fmt.Fprintf(t.out, "%s\t%s(%s)\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, target, time.Since(start))
 }
 
 // DefaultDatabase returns the default database name.

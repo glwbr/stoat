@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Suppressed unchecked error return from `fmt.Fprintf` in timing debug log to satisfy `errcheck` linter.
+
 ## [0.5.1] - 2026-03-14
 
 ### Added
