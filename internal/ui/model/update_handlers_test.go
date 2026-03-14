@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -374,6 +375,185 @@ func TestEditModeBlocksNavigationKeys(t *testing.T) {
 			}
 			if cmd != nil {
 				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+		})
+	}
+}
+
+func statusText(m Model) string {
+	return m.statusbar.View(80).Content
+}
+
+func TestHandleConnectionFailed(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantMsg string
+	}{
+		{
+			name:    "shows_error_in_status_bar",
+			err:     errors.New("connection refused"),
+			wantMsg: "Connection failed",
+		},
+		{
+			name:    "includes_error_detail",
+			err:     errors.New("timeout"),
+			wantMsg: "timeout",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			next, cmd := m.handleConnectionFailed(ConnectionFailedMsg{err: tt.err})
+			got := next.(Model)
+			if cmd != nil {
+				t.Errorf("handleConnectionFailed() cmd = %v, want nil", cmd)
+			}
+			if !strings.Contains(statusText(got), tt.wantMsg) {
+				t.Errorf("status %q does not contain %q", statusText(got), tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestHandleConnected(t *testing.T) {
+	tests := []struct {
+		name           string
+		wantSourceSet  bool
+		wantStatusText string
+		wantCmd        bool
+	}{
+		{
+			name:           "sets_source_and_triggers_database_load",
+			wantSourceSet:  true,
+			wantStatusText: "Loading databases",
+			wantCmd:        true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			next, cmd := m.handleConnected(ConnectedMsg{source: mockDataSource{}})
+			got := next.(Model)
+			if tt.wantSourceSet && !got.HasConnection() {
+				t.Error("handleConnected() source not set on model")
+			}
+			if !strings.Contains(statusText(got), tt.wantStatusText) {
+				t.Errorf("status %q does not contain %q", statusText(got), tt.wantStatusText)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("handleConnected() cmd = nil, want LoadDatabasesCmd")
+			}
+		})
+	}
+}
+
+func TestHandleDatabasesLoaded(t *testing.T) {
+	tests := []struct {
+		name           string
+		databases      []string
+		wantStatusText string
+		wantCmd        bool
+	}{
+		{
+			name:           "empty_list_sets_ready",
+			databases:      []string{},
+			wantStatusText: "Ready",
+			wantCmd:        false,
+		},
+		{
+			name:           "non_empty_list_triggers_table_load",
+			databases:      []string{"mydb"},
+			wantStatusText: "Loading tables",
+			wantCmd:        true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			m.source = mockDataSource{}
+			next, cmd := m.handleDatabasesLoaded(DatabasesLoadedMsg{Databases: tt.databases})
+			got := next.(Model)
+			if !strings.Contains(statusText(got), tt.wantStatusText) {
+				t.Errorf("status %q does not contain %q", statusText(got), tt.wantStatusText)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("expected non-nil cmd, got nil")
+			}
+			if !tt.wantCmd && cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+		})
+	}
+}
+
+func TestHandleTablesLoaded(t *testing.T) {
+	tests := []struct {
+		name           string
+		tables         []string
+		err            error
+		wantStatusText string
+	}{
+		{
+			name:           "success_sets_ready",
+			tables:         []string{"users", "posts"},
+			wantStatusText: "Ready",
+		},
+		{
+			name:           "empty_tables_still_sets_ready",
+			tables:         []string{},
+			wantStatusText: "Ready",
+		},
+		{
+			name:           "error_shows_in_status",
+			err:            errors.New("permission denied"),
+			wantStatusText: "permission denied",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			next, _ := m.handleTablesLoaded(TablesLoadedMsg{Database: "mydb", Tables: tt.tables, Err: tt.err})
+			got := next.(Model)
+			if !strings.Contains(statusText(got), tt.wantStatusText) {
+				t.Errorf("status %q does not contain %q", statusText(got), tt.wantStatusText)
+			}
+		})
+	}
+}
+
+func TestHandleOpenEditor(t *testing.T) {
+	tests := []struct {
+		name           string
+		hasConnection  bool
+		wantStatusText string
+		wantCmd        bool
+	}{
+		{
+			name:           "no_connection_shows_warning",
+			hasConnection:  false,
+			wantStatusText: "No active connection",
+			wantCmd:        true, // TTL timer cmd
+		},
+		{
+			name:          "with_connection_fires_editor_cmd",
+			hasConnection: true,
+			wantCmd:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			if tt.hasConnection {
+				m.source = mockDataSource{}
+			}
+			next, cmd := m.handleOpenEditor()
+			got := next.(Model)
+			if tt.wantStatusText != "" && !strings.Contains(statusText(got), tt.wantStatusText) {
+				t.Errorf("status %q does not contain %q", statusText(got), tt.wantStatusText)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("expected non-nil cmd, got nil")
 			}
 		})
 	}

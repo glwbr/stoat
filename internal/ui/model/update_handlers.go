@@ -286,6 +286,8 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
+	case "ctrl+e":
+		return m.handleOpenEditor()
 	case "ctrl+r":
 		return m.handleReload(msg)
 	case "q":
@@ -649,4 +651,15 @@ func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleConnectionFailed(msg ConnectionFailedMsg) (tea.Model, tea.Cmd) {
 	m.statusbar.SetStatus(" Connection failed: "+msg.err.Error(), statusbar.Error)
 	return m, nil
+}
+
+// handleOpenEditor opens $EDITOR with a SQL comment template. When the user
+// saves and closes, handleEditorQueryDone runs whatever was written.
+func (m Model) handleOpenEditor() (tea.Model, tea.Cmd) {
+	if !m.HasConnection() {
+		cmd := m.statusbar.SetStatusWithTTL(" No active connection", statusbar.Warning, 2*time.Second)
+		return m, cmd
+	}
+	template := "-- Write your SQL here, then save and close the editor to run it.\n\n"
+	return m, OpenEditorWithQueryCmd(template)
 }

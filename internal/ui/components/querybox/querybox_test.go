@@ -325,6 +325,11 @@ func TestHelpBindings(t *testing.T) {
 			wantHelp: "expand saved query",
 		},
 		{
+			name:     "open_in_editor_binding",
+			wantKeys: []string{"ctrl+e"},
+			wantHelp: "open in editor",
+		},
+		{
 			name:     "clear_query_binding",
 			wantKeys: []string{"ctrl+l"},
 			wantHelp: "clear query",

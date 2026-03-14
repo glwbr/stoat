@@ -434,6 +434,10 @@ func (m Model) helpBindings() (pane []key.Binding, global []key.Binding) {
 			key.WithHelp("?", "toggle help"),
 		),
 		key.NewBinding(
+			key.WithKeys("ctrl+e"),
+			key.WithHelp("ctrl+e", "open editor"),
+		),
+		key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "focus panes"),
 		),

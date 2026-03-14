@@ -11,7 +11,7 @@ build:
 	$(GO) build -o bin/$(TARGET) cmd/$(TARGET)/main.go
 
 test:
-	$(GO) test ./...
+	$(GO) test -v ./...
 
 fmt:
 	$(GOFMT) -s -w .

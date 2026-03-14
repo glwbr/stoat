@@ -130,6 +130,10 @@ func HelpBindings() []key.Binding {
 			key.WithHelp("ctrl+n", "expand saved query"),
 		),
 		key.NewBinding(
+			key.WithKeys("ctrl+e"),
+			key.WithHelp("ctrl+e", "open in editor"),
+		),
+		key.NewBinding(
 			key.WithKeys("ctrl+l"),
 			key.WithHelp("ctrl+l", "clear query"),
 		),
