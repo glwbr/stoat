@@ -18,6 +18,7 @@ import (
 
 // handleDatabasesLoaded handles the DatabasesLoadedMsg and updates the sidebar.
 func (m Model) handleDatabasesLoaded(msg DatabasesLoadedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.StopSpinner()
 	if msg.Err != nil {
 		cmd := m.statusbar.SetStatusWithTTL(" Databases: "+msg.Err.Error(), statusbar.Error, 4*time.Second)
 		return m, cmd
@@ -35,6 +36,7 @@ func (m Model) handleDatabasesLoaded(msg DatabasesLoadedMsg) (tea.Model, tea.Cmd
 
 // handleTablesLoaded handles the TablesLoadedMsg and updates the sidebar.
 func (m Model) handleTablesLoaded(msg TablesLoadedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.StopSpinner()
 	if msg.Err != nil {
 		cmd := m.statusbar.SetStatusWithTTL(" Tables: "+msg.Err.Error(), statusbar.Error, 4*time.Second)
 		return m, cmd
@@ -50,6 +52,7 @@ func (m Model) handleTablesLoaded(msg TablesLoadedMsg) (tea.Model, tea.Cmd) {
 
 // handleRowsLoaded handles the RowsLoadedMsg and updates the table.
 func (m Model) handleRowsLoaded(msg RowsLoadedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.StopSpinner()
 	if msg.Err != nil {
 		cmd := m.statusbar.SetStatusWithTTL(" Rows: "+msg.Err.Error(), statusbar.Error, 4*time.Second)
 		return m, cmd
@@ -135,6 +138,7 @@ func (m Model) handleForeignKeysLoaded(msg ForeignKeysLoadedMsg) (tea.Model, tea
 // replace the table with that result. Plain DML with no result set only shows
 // the affected row count in the status bar and leaves the table as-is.
 func (m Model) handleQueryExecuted(msg QueryExecutedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.StopSpinner()
 	if msg.Err != nil {
 		cmd := m.statusbar.SetStatusWithTTL(" Query failed: "+msg.Err.Error(), statusbar.Error, 4*time.Second)
 		return m, cmd
@@ -206,8 +210,8 @@ func (m Model) handleEditorQueryDone(msg EditorQueryMsg) (tea.Model, tea.Cmd) {
 		cmd := m.statusbar.SetStatusWithTTL(" No active connection", statusbar.Warning, 2*time.Second)
 		return m, cmd
 	}
-	m.statusbar.SetStatus(" Running query...", statusbar.Info)
-	return m, RequestQueryRunCmd(query)
+	spinnerCmd := m.statusbar.StartSpinner("Running query", statusbar.Info)
+	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(query))
 }
 
 // handleUpdateFromCell handles the update from cell key press.
@@ -219,7 +223,8 @@ func (m Model) handleUpdateFromCell(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bo
 		return m, nil, false
 	}
 	if m.viewingQueryResult {
-		return m, nil, false
+		cmd := m.statusbar.SetStatusWithTTL(" Query results are read-only", statusbar.Warning, 2*time.Second)
+		return m, cmd, true
 	}
 	db := m.sidebar.EffectiveDB()
 	tableName := m.sidebar.SelectedTable()
@@ -264,8 +269,8 @@ func (m Model) handleInlineEditConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd,
 	}
 	q := BuildUpdateQueryFromCell(tableName, col.Key, col.Type, newValue, pkColumns, activeRow, colTypeByKey)
 	m.pendingTableReload = true
-	m.statusbar.SetStatus(" Running update...", statusbar.Info)
-	return m, RequestQueryRunCmd(q), true
+	spinnerCmd := m.statusbar.StartSpinner("Running update", statusbar.Info)
+	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(q)), true
 }
 
 // keyHandler is a function that handles a key press and returns whether it was handled.
@@ -371,8 +376,8 @@ func (m Model) handleQueryShortcut(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, boo
 		cmd := m.statusbar.SetStatusWithTTL(" Query is empty", statusbar.Warning, 2*time.Second)
 		return m, cmd, true
 	}
-	m.statusbar.SetStatus(" Running query...", statusbar.Info)
-	return m, RequestQueryRunCmd(query), true
+	spinnerCmd := m.statusbar.StartSpinner("Running query", statusbar.Info)
+	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(query)), true
 }
 
 // handlePagingShortcut handles the paging shortcut key press.
@@ -389,21 +394,21 @@ func (m Model) handlePagingShortcut(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bo
 	if msg.String() == "ctrl+n" && m.paging.currentHasMore {
 		m.setPendingPageNav(pageNavNext)
 		m.paging.requestAfter = m.paging.currentAfter
-		m.statusbar.SetStatus(" Loading page…", statusbar.Info)
-		return m, LoadTableRowsCmd(m.source, target, database.PageRequest{
+		spinnerCmd := m.statusbar.StartSpinner("Loading page", statusbar.Info)
+		return m, tea.Batch(spinnerCmd, LoadTableRowsCmd(m.source, target, database.PageRequest{
 			Limit: DefaultPageLimit,
 			After: m.paging.currentAfter,
-		}), true
+		})), true
 	}
 	if msg.String() == "ctrl+b" && len(m.paging.afterStack) > 1 {
 		prevCursor := m.paging.afterStack[len(m.paging.afterStack)-2]
 		m.setPendingPageNav(pageNavPrev)
 		m.paging.requestAfter = prevCursor
-		m.statusbar.SetStatus(" Loading page…", statusbar.Info)
-		return m, LoadTableRowsCmd(m.source, target, database.PageRequest{
+		spinnerCmd := m.statusbar.StartSpinner("Loading page", statusbar.Info)
+		return m, tea.Batch(spinnerCmd, LoadTableRowsCmd(m.source, target, database.PageRequest{
 			Limit: DefaultPageLimit,
 			After: prevCursor,
-		}), true
+		})), true
 	}
 	return m, nil, false
 }
@@ -421,8 +426,8 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.applyViewState()
 				if m.HasConnection() {
 					if db := m.sidebar.EffectiveDB(); db != "" {
-						m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
-						return m, LoadTablesCmd(m.source, db)
+						spinnerCmd := m.statusbar.StartSpinner("Loading tables", statusbar.Info)
+						return m, tea.Batch(spinnerCmd, LoadTablesCmd(m.source, db))
 					}
 				}
 				return m, nil
@@ -453,8 +458,8 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Limit: DefaultPageLimit,
 				After: "",
 			}
-			m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
-			return m, LoadTableRowsCmd(m.source, target, page)
+			spinnerCmd := m.statusbar.StartSpinner("Loading "+tableName, statusbar.Info)
+			return m, tea.Batch(spinnerCmd, LoadTableRowsCmd(m.source, target, page))
 		}
 	case FocusQuerybox:
 		next, cmd := m.querybox.Update(msg)
@@ -519,8 +524,8 @@ func (m Model) handleApplyFilter(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 		m.paging.requestAfter = ""
 		target := database.DatabaseTarget{Database: db, Table: tableName}
 		page := database.PageRequest{Limit: DefaultPageLimit, After: ""}
-		m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
-		return m, LoadTableRowsCmd(m.source, target, page), true
+		spinnerCmd := m.statusbar.StartSpinner("Loading "+tableName, statusbar.Info)
+		return m, tea.Batch(spinnerCmd, LoadTableRowsCmd(m.source, target, page)), true
 	}
 
 	filtered := filterRowsByExpression(m.table.Rows(), m.table.Columns(), expression)
@@ -545,8 +550,8 @@ func (m Model) handleReload(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	target := database.DatabaseTarget{Database: db, Table: tableName}
 	page := database.PageRequest{Limit: DefaultPageLimit, After: ""}
-	m.statusbar.SetStatus(" Loading "+tableName+"…", statusbar.Info)
-	return m, LoadTableRowsCmd(m.source, target, page)
+	spinnerCmd := m.statusbar.StartSpinner("Loading "+tableName, statusbar.Info)
+	return m, tea.Batch(spinnerCmd, LoadTableRowsCmd(m.source, target, page))
 }
 
 // filterRowsByExpression filters the rows by the expression.
@@ -624,28 +629,12 @@ func (m Model) handleTabSwitch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
-// queryPreviewForHeader returns a one-line, truncated preview of the query for the header.
-func queryPreviewForHeader(query string) string {
-	const queryPreviewMaxLen = 52
-	line := strings.TrimSpace(query)
-	if line == "" {
-		return ""
-	}
-
-	fields := strings.Fields(line)
-	line = strings.Join(fields, " ")
-	if len(line) <= queryPreviewMaxLen {
-		return line
-	}
-	return line[:queryPreviewMaxLen-1] + "…"
-}
-
 // handleConnecting sets the status bar to "Connecting…" and fires the async
 // ConnectCmd. The extra message hop gives the UI one render cycle to paint
 // the status before the blocking provider call starts.
 func (m Model) handleConnecting(msg ConnectingMsg) (tea.Model, tea.Cmd) {
-	m.statusbar.SetStatus(" Connecting to "+msg.cfg.Name+"…", statusbar.Info)
-	return m, ConnectCmd(msg.cfg)
+	spinnerCmd := m.statusbar.StartSpinner("Connecting to "+msg.cfg.Name, statusbar.Info)
+	return m, tea.Batch(spinnerCmd, ConnectCmd(msg.cfg))
 }
 
 // handleConnected stores the established data source and begins loading databases.
@@ -660,13 +649,14 @@ func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
 	}
 	defaultDB, err := m.source.DefaultDatabase(context.Background())
 	if err != nil || defaultDB == "" {
-		m.statusbar.SetStatus(" Loading databases…", statusbar.Info)
-		return m, LoadDatabasesCmd(m.source)
+		spinnerCmd := m.statusbar.StartSpinner("Loading databases", statusbar.Info)
+		return m, tea.Batch(spinnerCmd, LoadDatabasesCmd(m.source))
 	}
 	m.sidebar.SetDatabases([]string{defaultDB})
 	m.sidebar.OpenSelectedDatabase()
-	m.statusbar.SetStatus(" Loading tables…", statusbar.Info)
+	spinnerCmd := m.statusbar.StartSpinner("Loading tables", statusbar.Info)
 	return m, tea.Batch(
+		spinnerCmd,
 		LoadDatabasesCmd(m.source),
 		LoadTablesCmd(m.source, defaultDB),
 	)
@@ -674,6 +664,7 @@ func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
 
 // handleConnectionFailed shows a sticky error in the status bar.
 func (m Model) handleConnectionFailed(msg ConnectionFailedMsg) (tea.Model, tea.Cmd) {
+	m.statusbar.StopSpinner()
 	m.statusbar.SetStatus(" Connection failed: "+msg.err.Error(), statusbar.Error)
 	return m, nil
 }
@@ -687,4 +678,20 @@ func (m Model) handleOpenEditor() (tea.Model, tea.Cmd) {
 	}
 	template := "-- Write your SQL here, then save and close the editor to run it.\n\n"
 	return m, OpenEditorWithQueryCmd(template)
+}
+
+// queryPreviewForHeader returns a one-line, truncated preview of the query for the header.
+func queryPreviewForHeader(query string) string {
+	const queryPreviewMaxLen = 52
+	line := strings.TrimSpace(query)
+	if line == "" {
+		return ""
+	}
+
+	fields := strings.Fields(line)
+	line = strings.Join(fields, " ")
+	if len(line) <= queryPreviewMaxLen {
+		return line
+	}
+	return line[:queryPreviewMaxLen-1] + "…"
 }

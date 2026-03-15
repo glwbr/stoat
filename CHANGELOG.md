@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Spinner in status bar.** Async operations (connecting, loading tables/rows, running queries) now show an animated spinner in the status bar, making it clear when work is in progress rather than displaying static text.
+- **Read-only feedback for query results.** Pressing `Enter` on a cell while viewing query results now flashes a `Query results are read-only` warning in the status bar instead of silently doing nothing.
+
 ### Fixed
 
 - Suppressed unchecked error return from `fmt.Fprintf` in timing debug log to satisfy `errcheck` linter.

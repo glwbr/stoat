@@ -3,6 +3,7 @@ package statusbar
 import (
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -36,13 +37,17 @@ type Model struct {
 	text string
 	kind Kind
 	seq  int
+
+	spinner  spinner.Model
+	spinning bool
 }
 
 // New returns a new status bar model with default " Ready" info message.
 func New() Model {
 	return Model{
-		text: defaultText,
-		kind: Info,
+		text:    defaultText,
+		kind:    Info,
+		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 	}
 }
 
@@ -78,6 +83,19 @@ func (m *Model) HandleExpired(msg ExpiredMsg) {
 	m.kind = Info
 }
 
+// StartSpinner starts a spinner with the given text and kind.
+func (m *Model) StartSpinner(text string, kind Kind) tea.Cmd {
+	m.text = text
+	m.kind = kind
+	m.spinning = true
+
+	return m.spinner.Tick
+}
+
+func (m *Model) StopSpinner() {
+	m.spinning = false
+}
+
 // View renders the status bar at the given width using the current theme.
 func (m Model) View(width int) tea.View {
 	style := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
@@ -89,10 +107,24 @@ func (m Model) View(width int) tea.View {
 	case Error:
 		style = style.Foreground(theme.Current.TextError).Bold(true)
 	}
+	text := m.text
+	if m.spinning {
+		text = " " + m.spinner.View() + " " + text
+	}
 	contentWidth := max(minContentWidth, width-horizontalPaddingCols)
-	content := style.Render(ansi.Truncate(m.text, contentWidth, "…"))
+	content := style.Render(ansi.Truncate(text, contentWidth, "…"))
 	rendered := lipgloss.NewStyle().
 		Width(width).
 		Render(content)
 	return tea.NewView(rendered)
+}
+
+// Update handles spinner updates and returns a command to be executed.
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	if !m.spinning {
+		return nil
+	}
+	var cmd tea.Cmd
+	m.spinner, cmd = m.spinner.Update(msg)
+	return cmd
 }

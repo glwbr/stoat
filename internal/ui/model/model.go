@@ -272,6 +272,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.statusbar.SetStatusWithTTL(" Copied to clipboard", statusbar.Success, 2*time.Second)
 		return m, cmd
+	default:
+		cmd := m.statusbar.Update(msg)
+		return m, cmd
 	}
-	return m, nil
 }

@@ -11,6 +11,31 @@ import (
 	"github.com/jxdones/stoat/internal/database"
 )
 
+// findMsg executes cmd and returns the first message of type T found,
+// unwrapping tea.BatchMsg if needed. ok is false if no match is found.
+func findMsg[T tea.Msg](cmd tea.Cmd) (T, bool) {
+	if cmd == nil {
+		var zero T
+		return zero, false
+	}
+	msg := cmd()
+	if m, ok := msg.(T); ok {
+		return m, true
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			if m, ok := c().(T); ok {
+				return m, true
+			}
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 // keyMsg returns a tea.KeyPressMsg for testing. s must match msg.String() in model.Update (e.g. "q", "tab", "shift+tab", "ctrl+c").
 func keyMsg(s string) tea.KeyPressMsg {
 	switch s {
@@ -673,10 +698,9 @@ func TestCtrlSInQuerybox(t *testing.T) {
 			}
 
 			if cmd != nil && tt.wantQueryCmd {
-				msg := cmd()
-				runMsg, ok := msg.(QueryRunRequestedMsg)
+				runMsg, ok := findMsg[QueryRunRequestedMsg](cmd)
 				if !ok {
-					t.Fatalf("expected QueryRunRequestedMsg, got %T", msg)
+					t.Fatalf("expected QueryRunRequestedMsg, got %T", cmd())
 				}
 				nextModel, runCmd := next.(Model).Update(runMsg)
 				if runCmd == nil {
