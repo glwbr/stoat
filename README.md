@@ -160,6 +160,7 @@ Stoat reads configuration from **`~/.stoat/config.yaml`**. This file is created 
 | Option | Description |
 |--------|-------------|
 | `theme` | UI theme: `default`, `dracula`, or `solarized`. |
+| `connections` | Saved database connections. |
 | `saved_queries` | Named SQL snippets. In the query box, type `@Name` and press **Ctrl+N** to expand. |
 
 Example:
@@ -167,6 +168,19 @@ Example:
 ```yaml
 # ~/.stoat/config.yaml
 theme: default
+
+connections:
+  - name: local
+    type: sqlite
+    path: /path/to/database.sqlite
+
+  - name: my-postgres
+    type: postgres
+    host: localhost
+    port: 5432        # optional, defaults to 5432
+    user: postgres
+    password: secret
+    database: mydb
 
 saved_queries:
   - name: recent_users
