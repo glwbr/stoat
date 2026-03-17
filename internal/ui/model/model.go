@@ -218,12 +218,13 @@ func (m Model) isFocused(p FocusedPanel) bool {
 	return m.view.focus == p
 }
 
-// SetConfig sets the configuration.
+// SetConfig applies the configuration to the model. It sets the theme and
+// populates the connection picker. Saved queries are loaded later in
+// handleConnected, once a connection is established.
 func (m *Model) SetConfig(config config.Config) {
 	if _, ok := theme.SetNamedTheme(config.Theme); ok {
 		m.applyViewState()
 	}
-	m.savedQueries = toModelSavedQueries(config.SavedQueries)
 	m.connectionPicker.SetConnections(config.Connections)
 }
 

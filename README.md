@@ -165,8 +165,7 @@ Stoat reads configuration from **`~/.stoat/config.yaml`**. This file is created 
 | Option | Description |
 |--------|-------------|
 | `theme` | UI theme: `default`, `dracula`, or `solarized`. |
-| `connections` | Saved database connections. Each connection supports `read_only: true` to enforce read-only mode at the DB and UI level. |
-| `saved_queries` | Named SQL snippets. In the query box, type `@Name` and press **Ctrl+N** to expand. |
+| `connections` | Saved database connections. Each connection supports `read_only: true` to enforce read-only mode at the DB and UI level, and `saved_queries` to define named SQL snippets scoped to that connection. |
 
 Example:
 
@@ -178,6 +177,11 @@ connections:
   - name: local
     type: sqlite
     path: /path/to/database.sqlite
+    saved_queries:
+      - name: recent_users
+        query: SELECT * FROM users ORDER BY updated_at DESC LIMIT 10
+      - name: schema
+        query: SELECT name, sql FROM sqlite_master WHERE type = 'table'
 
   - name: my-postgres
     type: postgres
@@ -196,11 +200,6 @@ connections:
     database: postgres
     read_only: true   # blocks writes in the UI and at the DB level
 
-saved_queries:
-  - name: recent_users
-    query: SELECT * FROM users ORDER BY updated_at DESC LIMIT 10
-  - name: schema
-    query: SELECT name, sql FROM sqlite_master WHERE type = 'table'
 ```
 
 ## License

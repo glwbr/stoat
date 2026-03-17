@@ -19,11 +19,13 @@ const (
 	EventClosed
 )
 
+// Model is the connection picker component.
 type Model struct {
 	connections []config.Connection
 	selected    int
 }
 
+// New creates a new connection picker model.
 func New() Model {
 	return Model{
 		connections: []config.Connection{},
@@ -31,6 +33,7 @@ func New() Model {
 	}
 }
 
+// Selected returns the selected connection.
 func (m Model) Selected() config.Connection {
 	if len(m.connections) == 0 {
 		return config.Connection{}
@@ -38,10 +41,22 @@ func (m Model) Selected() config.Connection {
 	return m.connections[m.selected]
 }
 
+// SetConnections sets the connections.
 func (m *Model) SetConnections(connections []config.Connection) {
 	m.connections = connections
 }
 
+// Connection returns the connection with the given name.
+func (m Model) ConnectionByName(name string) (config.Connection, bool) {
+	for _, conn := range m.connections {
+		if conn.Name == name {
+			return conn, true
+		}
+	}
+	return config.Connection{}, false
+}
+
+// Update handles the key press message and returns the updated model and event.
 func (m Model) Update(msg tea.KeyPressMsg) (Model, Event) {
 	switch {
 	case key.Matches(msg, keys.Default.MoveUp):
@@ -60,6 +75,7 @@ func (m Model) Update(msg tea.KeyPressMsg) (Model, Event) {
 	return m, EventNone
 }
 
+// View returns the view of the connection picker.
 func (m Model) View() string {
 	lines := make([]string, len(m.connections))
 	for i, conn := range m.connections {

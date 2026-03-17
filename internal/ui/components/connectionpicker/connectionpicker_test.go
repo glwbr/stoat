@@ -156,7 +156,59 @@ func TestSelected(t *testing.T) {
 
 func TestSelected_Empty(t *testing.T) {
 	m := New()
-	if got := m.Selected(); got != (config.Connection{}) {
+	if got := m.Selected(); !isZeroConnection(got) {
 		t.Errorf("Selected() on empty model = %v, want zero value", got)
 	}
+}
+
+func TestConnectionByName(t *testing.T) {
+	tests := []struct {
+		name      string
+		queryName string
+		wantFound bool
+		wantName  string
+	}{
+		{
+			name:      "returns_matching_connection",
+			queryName: "prod-postgres",
+			wantFound: true,
+			wantName:  "prod-postgres",
+		},
+		{
+			name:      "returns_false_for_unknown_name",
+			queryName: "does-not-exist",
+			wantFound: false,
+			wantName:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWith(testConnections)
+			got, found := m.ConnectionByName(tt.queryName)
+
+			if found != tt.wantFound {
+				t.Fatalf("ConnectionByName(%q) found = %v, want %v", tt.queryName, found, tt.wantFound)
+			}
+			if got.Name != tt.wantName {
+				t.Errorf("ConnectionByName(%q).Name = %q, want %q", tt.queryName, got.Name, tt.wantName)
+			}
+			if !tt.wantFound && !isZeroConnection(got) {
+				t.Errorf("ConnectionByName(%q) = %v, want zero value", tt.queryName, got)
+			}
+		})
+	}
+}
+
+func isZeroConnection(c config.Connection) bool {
+	return c.Name == "" &&
+		c.Type == "" &&
+		!c.ReadOnly &&
+		c.Host == "" &&
+		c.Port == 0 &&
+		c.User == "" &&
+		c.Password == "" &&
+		c.Database == "" &&
+		c.Path == "" &&
+		len(c.SavedQueries) == 0
 }

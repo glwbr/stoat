@@ -31,12 +31,12 @@ type Connection struct {
 
 	// SQLite fields
 	Path string `yaml:"path,omitempty"`
+	SavedQueries []SavedQuery `yaml:"saved_queries"`
 }
 
 // Config holds stoat configuration loaded from ~/.stoat/config.yaml.
 type Config struct {
 	Theme        string       `yaml:"theme"`
-	SavedQueries []SavedQuery `yaml:"saved_queries"`
 	Connections  []Connection `yaml:"connections"`
 }
 
@@ -71,7 +71,6 @@ func EnsureConfigDir() error {
 func DefaultConfig() Config {
 	return Config{
 		Theme:        "default",
-		SavedQueries: []SavedQuery{},
 	}
 }
 

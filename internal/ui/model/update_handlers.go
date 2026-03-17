@@ -678,6 +678,10 @@ func (m Model) handleConnected(msg ConnectedMsg) (tea.Model, tea.Cmd) {
 		m.source = datasource.WithTiming(m.source, m.debugOutput)
 	}
 
+	if conn, ok := m.connectionPicker.ConnectionByName(msg.name); ok {
+		m.savedQueries = toModelSavedQueries(conn.SavedQueries)
+	}
+
 	m.readOnly = msg.readOnly || m.forceReadOnly
 	m.statusbar.SetConnectionName(msg.name)
 	m.statusbar.SetReadOnly(m.readOnly)
