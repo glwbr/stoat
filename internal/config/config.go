@@ -30,14 +30,14 @@ type Connection struct {
 	Database string `yaml:"database,omitempty"`
 
 	// SQLite fields
-	Path string `yaml:"path,omitempty"`
+	Path         string       `yaml:"path,omitempty"`
 	SavedQueries []SavedQuery `yaml:"saved_queries"`
 }
 
 // Config holds stoat configuration loaded from ~/.stoat/config.yaml.
 type Config struct {
-	Theme        string       `yaml:"theme"`
-	Connections  []Connection `yaml:"connections"`
+	Theme       string       `yaml:"theme"`
+	Connections []Connection `yaml:"connections"`
 }
 
 // ConfigDir returns the stoat config directory (e.g. ~/.stoat).
@@ -70,7 +70,7 @@ func EnsureConfigDir() error {
 // DefaultConfig returns config with standard values (e.g. for first-run).
 func DefaultConfig() Config {
 	return Config{
-		Theme:        "default",
+		Theme: "default",
 	}
 }
 

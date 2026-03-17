@@ -604,3 +604,290 @@ func TestHelpBindingsInEditMode(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleDeleteRow(t *testing.T) {
+	tests := []struct {
+		name              string
+		setup             func(*Model)
+		key               string
+		prevKey           string
+		wantHandled       bool
+		wantCmd           bool
+		wantPendingDelete bool
+		wantLastKey       string
+	}{
+		{
+			name: "requires_table_focus",
+			setup: func(m *Model) {
+				m.view.focus = FocusSidebar
+			},
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: false,
+		},
+		{
+			name:              "requires_d_key",
+			key:               "x",
+			prevKey:           "d",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: false,
+		},
+		{
+			name: "requires_records_tab",
+			setup: func(m *Model) {
+				m.tabs.SetActive(1) // Columns
+			},
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: false,
+		},
+		{
+			name: "viewing_query_result_blocks_delete",
+			setup: func(m *Model) {
+				m.viewingQueryResult = true
+			},
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       true,
+			wantCmd:           true,
+			wantPendingDelete: false,
+		},
+		{
+			name: "read_only_blocks_delete",
+			setup: func(m *Model) {
+				m.readOnly = true
+			},
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       true,
+			wantCmd:           true,
+			wantPendingDelete: false,
+		},
+		{
+			name: "requires_active_row",
+			setup: func(m *Model) {
+				m.table.SetRows(nil)
+			},
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: false,
+		},
+		{
+			name:              "first_d_stores_last_key",
+			key:               "d",
+			prevKey:           "",
+			wantHandled:       true,
+			wantCmd:           false,
+			wantPendingDelete: false,
+			wantLastKey:       "d",
+		},
+		{
+			name:              "dd_starts_delete_confirmation",
+			key:               "d",
+			prevKey:           "d",
+			wantHandled:       true,
+			wantCmd:           false,
+			wantPendingDelete: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWithTableFocusAndData()
+			if tt.setup != nil {
+				tt.setup(&m)
+			}
+
+			got, cmd, handled := m.handleDeleteRow(keyMsg(tt.key), tt.prevKey)
+			next := got.(Model)
+			if handled != tt.wantHandled {
+				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("expected non-nil cmd, got nil")
+			}
+			if !tt.wantCmd && cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+			if next.pendingDeleteConfirm != tt.wantPendingDelete {
+				t.Errorf("pendingDeleteConfirm = %v, want %v", next.pendingDeleteConfirm, tt.wantPendingDelete)
+			}
+			if next.lastKey != tt.wantLastKey {
+				t.Errorf("lastKey = %q, want %q", next.lastKey, tt.wantLastKey)
+			}
+		})
+	}
+}
+
+func TestHandleDeleteConfirm(t *testing.T) {
+	tests := []struct {
+		name              string
+		setup             func(*Model)
+		key               string
+		wantHandled       bool
+		wantCmd           bool
+		wantPendingDelete bool
+		wantPendingReload bool
+		wantQueryContains []string
+	}{
+		{
+			name:              "requires_pending_confirmation",
+			key:               "y",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: false,
+			wantPendingReload: false,
+		},
+		{
+			name: "requires_y_key",
+			setup: func(m *Model) {
+				m.pendingDeleteConfirm = true
+			},
+			key:               "n",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingDelete: true,
+			wantPendingReload: false,
+		},
+		{
+			name: "missing_row_is_handled_without_query",
+			setup: func(m *Model) {
+				m.pendingDeleteConfirm = true
+				m.table.SetRows(nil)
+			},
+			key:               "y",
+			wantHandled:       true,
+			wantCmd:           false,
+			wantPendingDelete: false,
+			wantPendingReload: false,
+		},
+		{
+			name: "missing_database_or_table_is_handled_without_query",
+			setup: func(m *Model) {
+				m.pendingDeleteConfirm = true
+				m.sidebar.SetDatabases(nil)
+			},
+			key:               "y",
+			wantHandled:       true,
+			wantCmd:           false,
+			wantPendingDelete: false,
+			wantPendingReload: false,
+		},
+		{
+			name: "enqueues_delete_query_run",
+			setup: func(m *Model) {
+				m.pendingDeleteConfirm = true
+			},
+			key:               "y",
+			wantHandled:       true,
+			wantCmd:           true,
+			wantPendingDelete: false,
+			wantPendingReload: true,
+			wantQueryContains: []string{"DELETE FROM \"users\"", "\"name\" = 'Alice'"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWithTableFocusAndData()
+			if tt.setup != nil {
+				tt.setup(&m)
+			}
+
+			got, cmd, handled := m.handleDeleteConfirm(keyMsg(tt.key))
+			next := got.(Model)
+			if handled != tt.wantHandled {
+				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Fatal("expected non-nil cmd, got nil")
+			}
+			if !tt.wantCmd && cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+			if next.pendingDeleteConfirm != tt.wantPendingDelete {
+				t.Errorf("pendingDeleteConfirm = %v, want %v", next.pendingDeleteConfirm, tt.wantPendingDelete)
+			}
+			if next.pendingTableReload != tt.wantPendingReload {
+				t.Errorf("pendingTableReload = %v, want %v", next.pendingTableReload, tt.wantPendingReload)
+			}
+
+			if len(tt.wantQueryContains) > 0 {
+				msg, ok := findMsg[QueryRunRequestedMsg](cmd)
+				if !ok {
+					t.Fatal("expected QueryRunRequestedMsg in command")
+				}
+				for _, sub := range tt.wantQueryContains {
+					if !strings.Contains(msg.Query, sub) {
+						t.Errorf("query %q does not contain %q", msg.Query, sub)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHandleDeleteCancel(t *testing.T) {
+	tests := []struct {
+		name              string
+		pendingDelete     bool
+		key               string
+		wantHandled       bool
+		wantPendingDelete bool
+	}{
+		{
+			name:              "requires_pending_confirmation",
+			pendingDelete:     false,
+			key:               "n",
+			wantHandled:       false,
+			wantPendingDelete: false,
+		},
+		{
+			name:              "ignores_other_keys",
+			pendingDelete:     true,
+			key:               "y",
+			wantHandled:       false,
+			wantPendingDelete: true,
+		},
+		{
+			name:              "n_cancels_pending_delete",
+			pendingDelete:     true,
+			key:               "n",
+			wantHandled:       true,
+			wantPendingDelete: false,
+		},
+		{
+			name:              "esc_cancels_pending_delete",
+			pendingDelete:     true,
+			key:               "esc",
+			wantHandled:       true,
+			wantPendingDelete: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWithTableFocusAndData()
+			m.pendingDeleteConfirm = tt.pendingDelete
+
+			got, cmd, handled := m.handleDeleteCancel(keyMsg(tt.key))
+			next := got.(Model)
+			if handled != tt.wantHandled {
+				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+			if next.pendingDeleteConfirm != tt.wantPendingDelete {
+				t.Errorf("pendingDeleteConfirm = %v, want %v", next.pendingDeleteConfirm, tt.wantPendingDelete)
+			}
+		})
+	}
+}

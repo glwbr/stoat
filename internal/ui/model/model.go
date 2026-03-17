@@ -48,12 +48,13 @@ type tableSchema struct {
 // Model is the root Bubble Tea model; it composes the sidebar, table, status bar, and other components.
 type Model struct {
 	// states
-	view               screenState
-	activeModal        activeModal
-	viewingQueryResult bool // It's true when the table content is from a run query.
-	helpExpanded       bool // It's true when the help is expanded.
-	inlineEditMode     bool
-	pendingTableReload bool
+	view                 screenState
+	activeModal          activeModal
+	viewingQueryResult   bool
+	helpExpanded         bool
+	inlineEditMode       bool
+	pendingTableReload   bool
+	pendingDeleteConfirm bool
 
 	// data
 	tableSchema tableSchema
@@ -82,6 +83,7 @@ type Model struct {
 	tablePKTarget  database.DatabaseTarget
 
 	queryResultPreview string // truncated one-line preview of the last run query for the header
+	lastKey            string // last key pressed, used to detect key sequences
 
 	forceReadOnly bool // set by --read-only CLI flag; forces read-only regardless of connection config
 	readOnly      bool // true when the active connection is read-only (either flag or config)
@@ -91,7 +93,7 @@ type Model struct {
 
 // detailRows returns the number of rows the detail section should occupy.
 func (m Model) detailRows() int {
-	if m.inlineEditMode {
+	if m.inlineEditMode || m.pendingDeleteConfirm {
 		return mainDetailRowsEdit
 	}
 	return mainDetailRowsNormal

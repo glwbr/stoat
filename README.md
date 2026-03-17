@@ -171,6 +171,7 @@ The options bar at the bottom shows shortcuts for the currently focused pane. Wh
 | `N` + motion (e.g. `4h`, `10j`) | Repeat motion N times (vim count prefix) |
 | `Enter` | Enter inline edit mode for the selected cell |
 | `y` | Copy value from active cell to clipboard |
+| `dd` | Delete selected row |
 
 ### Table — Edit mode
 
@@ -178,6 +179,13 @@ The options bar at the bottom shows shortcuts for the currently focused pane. Wh
 | --- | --- |
 | `Enter` | Confirm edit and run UPDATE |
 | `Esc` | Cancel edit |
+
+### Table — Delete mode
+
+| Key | Action |
+| --- | --- |
+| `y` | Confirm delete |
+| `n` / `Esc` | Cancel delete |
 
 ### Filter box
 

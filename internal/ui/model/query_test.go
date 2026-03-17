@@ -325,3 +325,107 @@ func TestBuildUpdateQueryFromCell(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildDeleteQuery(t *testing.T) {
+	tests := []struct {
+		name         string
+		table        string
+		pkColumns    []string
+		row          map[string]string
+		colTypeByKey map[string]string
+		want         []string
+		notWant      []string
+	}{
+		{
+			name:         "uses_pk_for_where_when_provided",
+			table:        "users",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "1", "name": "alice"},
+			colTypeByKey: map[string]string{"id": "integer", "name": "text"},
+			want: []string{
+				`DELETE FROM "users"`,
+				`WHERE "id" = 1;`,
+			},
+			notWant: []string{"WARNING", `"name"`},
+		},
+		{
+			name:         "composite_pk_uses_all_pk_columns",
+			table:        "habit_logs",
+			pkColumns:    []string{"user_id", "habit_id"},
+			row:          map[string]string{"user_id": "1", "habit_id": "2", "note": "done"},
+			colTypeByKey: map[string]string{"user_id": "integer", "habit_id": "integer", "note": "text"},
+			want: []string{
+				`DELETE FROM "habit_logs"`,
+				`"user_id" = 1`,
+				`"habit_id" = 2`,
+			},
+			notWant: []string{"WARNING", `"note"`},
+		},
+		{
+			name:         "falls_back_to_all_columns_when_no_pk",
+			table:        "logs",
+			row:          map[string]string{"level": "info", "msg": "started"},
+			colTypeByKey: map[string]string{"level": "text", "msg": "text"},
+			want: []string{
+				"WARNING",
+				`DELETE FROM "logs"`,
+				`"level" = 'info'`,
+				`"msg" = 'started'`,
+			},
+		},
+		{
+			name:         "integer_pk_value_unquoted",
+			table:        "items",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "42"},
+			colTypeByKey: map[string]string{"id": "integer"},
+			want: []string{
+				`DELETE FROM "items"`,
+				`WHERE "id" = 42;`,
+			},
+			notWant: []string{`"id" = '42'`},
+		},
+		{
+			name:         "text_pk_value_with_quote_escaped",
+			table:        "t",
+			pkColumns:    []string{"code"},
+			row:          map[string]string{"code": "O'Brien"},
+			colTypeByKey: map[string]string{"code": "text"},
+			want: []string{
+				`DELETE FROM "t"`,
+				`WHERE "code" = 'O''Brien';`,
+			},
+		},
+		{
+			name:         "reserved_keyword_table_quoted",
+			table:        "order",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "1"},
+			colTypeByKey: map[string]string{"id": "integer"},
+			want:         []string{`DELETE FROM "order"`, `WHERE "id" = 1;`},
+		},
+		{
+			name:         "malicious_identifier_quoted_not_injection",
+			table:        "t",
+			pkColumns:    []string{`"; DROP TABLE t; --`},
+			row:          map[string]string{`"; DROP TABLE t; --`: "1"},
+			colTypeByKey: map[string]string{`"; DROP TABLE t; --`: "integer"},
+			want:         []string{`DELETE FROM "t"`, `WHERE "`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildDeleteQuery(tt.table, tt.pkColumns, tt.row, tt.colTypeByKey)
+			for _, sub := range tt.want {
+				if !strings.Contains(got, sub) {
+					t.Errorf("BuildDeleteQuery(...) result must contain %q.\nGot:\n%s", sub, got)
+				}
+			}
+			for _, sub := range tt.notWant {
+				if strings.Contains(got, sub) {
+					t.Errorf("BuildDeleteQuery(...) result must not contain %q.\nGot:\n%s", sub, got)
+				}
+			}
+		})
+	}
+}

@@ -308,6 +308,18 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.inlineEditMode {
 		return m.handleKeyPressInEditMode(msg)
 	}
+	prevKey := m.lastKey
+	m.lastKey = ""
+
+	if m.pendingDeleteConfirm {
+		if next, cmd, handled := m.handleDeleteConfirm(msg); handled {
+			return next, cmd
+		}
+		if next, cmd, handled := m.handleDeleteCancel(msg); handled {
+			return next, cmd
+		}
+		return m, nil
+	}
 
 	if m.activeModal == modalConnectionPicker {
 		return m.handleKeyPressInConnectionPicker(msg)
@@ -357,6 +369,9 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.handleApplyFilter,
 			m.handleTabSwitch,
 			m.handleUpdateFromCell,
+			func(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+				return m.handleDeleteRow(msg, prevKey)
+			},
 			m.handleQueryShortcut,
 			m.handlePagingShortcut,
 			m.handleExpandSavedQuery,
@@ -751,6 +766,78 @@ func (m Model) handleKeyPressInConnectionPicker(msg tea.KeyPressMsg) (tea.Model,
 	}
 
 	return m, nil
+}
+
+// handleDeleteRow handles the dd key sequence for deleting a row.
+// prevKey is the key pressed immediately before this one, used to detect the dd sequence.
+func (m Model) handleDeleteRow(msg tea.KeyPressMsg, prevKey string) (tea.Model, tea.Cmd, bool) {
+	if m.view.focus != FocusTable || msg.String() != "d" {
+		return m, nil, false
+	}
+	if m.tabs.ActiveTab() != "Records" {
+		return m, nil, false
+	}
+	if m.viewingQueryResult {
+		cmd := m.statusbar.SetStatusWithTTL(" Query results are read-only", statusbar.Warning, 2*time.Second)
+		return m, cmd, true
+	}
+	if m.readOnly {
+		cmd := m.statusbar.SetStatusWithTTL(" Read-only mode: write queries are not allowed", statusbar.Warning, 3*time.Second)
+		return m, cmd, true
+	}
+	if prevKey != "d" {
+		m.lastKey = "d"
+		return m, nil, true
+	}
+	_, ok := m.table.ActiveRow()
+	if !ok {
+		return m, nil, false
+	}
+	m.pendingDeleteConfirm = true
+	m.applyViewState()
+	return m, nil, true
+}
+
+// handleDeleteConfirm handles the y key press when a delete confirmation is pending.
+func (m Model) handleDeleteConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	if !m.pendingDeleteConfirm || msg.String() != "y" {
+		return m, nil, false
+	}
+	m.pendingDeleteConfirm = false
+	m.applyViewState()
+
+	db := m.sidebar.EffectiveDB()
+	tableName := m.sidebar.SelectedTable()
+	activeRow, ok := m.table.ActiveRow()
+	if !ok || db == "" || tableName == "" {
+		return m, nil, true
+	}
+	colTypeByKey := make(map[string]string)
+	for _, c := range m.table.Columns() {
+		colTypeByKey[c.Key] = c.Type
+	}
+	var pkColumns []string
+	target := database.DatabaseTarget{Database: db, Table: tableName}
+	if target == m.tablePKTarget && len(m.tablePKColumns) > 0 {
+		pkColumns = m.tablePKColumns
+	}
+	q := BuildDeleteQuery(tableName, pkColumns, activeRow, colTypeByKey)
+	m.pendingTableReload = true
+	spinnerCmd := m.statusbar.StartSpinner("Deleting row", statusbar.Info)
+	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(q)), true
+}
+
+// handleDeleteCancel handles the n or esc key press when a delete confirmation is pending.
+func (m Model) handleDeleteCancel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	if !m.pendingDeleteConfirm {
+		return m, nil, false
+	}
+	if msg.String() != "n" && msg.String() != "esc" {
+		return m, nil, false
+	}
+	m.pendingDeleteConfirm = false
+	m.applyViewState()
+	return m, nil, true
 }
 
 // queryPreviewForHeader returns a one-line, truncated preview of the query for the header.

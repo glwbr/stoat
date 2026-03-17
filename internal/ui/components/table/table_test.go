@@ -1054,3 +1054,15 @@ func Test_HelpBindings_returns_non_empty_bindings(t *testing.T) {
 		t.Error("HelpBindings() returned empty slice")
 	}
 }
+
+func Test_HelpBindings_includes_delete_row(t *testing.T) {
+	bindings := HelpBindings()
+	for _, b := range bindings {
+		for _, k := range b.Keys() {
+			if k == "d" {
+				return
+			}
+		}
+	}
+	t.Error("HelpBindings() missing binding for d (delete row)")
+}

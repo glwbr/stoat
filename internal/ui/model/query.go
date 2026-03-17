@@ -67,7 +67,6 @@ func BuildUpdateQueryFromCell(table, setColumn, setColType, setValue string, pkC
 	}
 
 	lines := []string{
-		"-- Generated from selected cell. Adjust as needed, then run it.",
 		fmt.Sprintf("UPDATE %s", tbl),
 		fmt.Sprintf("SET %s = %s", col, setLiteral),
 		whereClause,
@@ -75,6 +74,46 @@ func BuildUpdateQueryFromCell(table, setColumn, setColType, setValue string, pkC
 	}
 	if !usePK {
 		lines = append([]string{"-- WARNING: WHERE uses the edited column; may match multiple rows. Use primary key for a single row.", ""}, lines...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// BuildDeleteQuery builds a SQL DELETE query for the active row.
+// When pkColumns is non-empty, WHERE is built from primary key columns so only one row is deleted.
+// Otherwise WHERE matches all column values in the row (may match multiple rows if data is not unique).
+// colTypeByKey maps column key to type for formatting literals (e.g. "id" -> "integer").
+func BuildDeleteQuery(tableName string, pkColumns []string, row map[string]string, colTypeByKey map[string]string) string {
+	tbl := quoteIdentifier(tableName)
+
+	var whereClause string
+	usePK := len(pkColumns) > 0 && row != nil && colTypeByKey != nil
+	if usePK {
+		parts := make([]string, 0, len(pkColumns))
+		for _, pk := range pkColumns {
+			val := row[pk]
+			typ := colTypeByKey[pk]
+			parts = append(parts, quoteIdentifier(pk)+" = "+formatSQLValue(typ, val))
+		}
+		if len(parts) == len(pkColumns) {
+			whereClause = "WHERE " + strings.Join(parts, " AND ") + ";"
+		}
+	}
+	if whereClause == "" {
+		parts := make([]string, 0, len(row))
+		for col, val := range row {
+			typ := colTypeByKey[col]
+			parts = append(parts, quoteIdentifier(col)+" = "+formatSQLValue(typ, val))
+		}
+		whereClause = "WHERE " + strings.Join(parts, " AND ") + ";"
+	}
+
+	lines := []string{
+		fmt.Sprintf("DELETE FROM %s", tbl),
+		whereClause,
+		"",
+	}
+	if !usePK {
+		lines = append([]string{"-- WARNING: No primary key found; WHERE matches all column values. May delete multiple rows.", ""}, lines...)
 	}
 	return strings.Join(lines, "\n")
 }

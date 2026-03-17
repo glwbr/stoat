@@ -247,6 +247,9 @@ func (m Model) renderDetail(width int) string {
 	if m.inlineEditMode {
 		return m.renderDetailEdit(width)
 	}
+	if m.pendingDeleteConfirm {
+		return m.renderDetailDelete(width)
+	}
 
 	line, col := m.table.CursorPosition()
 	column, value, ok := m.table.ActiveCell()
@@ -286,6 +289,14 @@ func (m Model) renderDetailEdit(width int) string {
 	title := lipgloss.NewStyle().Foreground(theme.Current.TextAccent).Bold(true).
 		Render(fmt.Sprintf("EDIT · %s (%s)", column.Title, fieldType))
 	content := lipgloss.JoinVertical(lipgloss.Top, title, m.editbox.View().Content)
+	return lipgloss.NewStyle().Width(common.ClampMin(width, 1)).Padding(0, 1).Render(content)
+}
+
+// renderDetailDelete renders the detail area as a delete confirmation prompt.
+func (m Model) renderDetailDelete(width int) string {
+	title := lipgloss.NewStyle().Foreground(theme.Current.TextWarning).Bold(true).Render("DELETE ROW")
+	prompt := lipgloss.NewStyle().Foreground(theme.Current.TextPrimary).Render("Are you sure? (y / n)")
+	content := lipgloss.JoinVertical(lipgloss.Top, title, prompt)
 	return lipgloss.NewStyle().Width(common.ClampMin(width, 1)).Padding(0, 1).Render(content)
 }
 
@@ -513,6 +524,12 @@ func (m Model) helpBindings() (pane []key.Binding, global []key.Binding) {
 	// so the shortcuts bar doesn't show actions that are unavailable.
 	if m.inlineEditMode {
 		return editbox.HelpBindings(), nil
+	}
+	if m.pendingDeleteConfirm {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm delete")),
+			key.NewBinding(key.WithKeys("n"), key.WithHelp("n/esc", "cancel")),
+		}, nil
 	}
 
 	var paneBindings []key.Binding
