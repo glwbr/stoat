@@ -486,7 +486,7 @@ func (m Model) helpBindings() (pane []key.Binding, global []key.Binding) {
 	globalBindings := []key.Binding{
 		key.NewBinding(
 			key.WithKeys("?"),
-			key.WithHelp("?", "toggle help"),
+			key.WithHelp("?", "help"),
 		),
 		key.NewBinding(
 			key.WithKeys("c"),

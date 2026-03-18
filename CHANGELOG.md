@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Help shows tab-switch shortcuts.** The help panel now documents `Ctrl+1` through `Ctrl+5` for quickly switching between tabs.
+
+### Changed
+
+- **Help copy is shorter and clearer.** The `?` help binding label now reads `help` instead of `toggle help` for consistency with the current behavior.
+
+### Fixed
+
+- Updated debug log file mode literal to Go's modern octal format (`0o644`) to align with current Go style and avoid legacy-octal lint noise.
+
 ## [0.9.1] - 2026-03-18
 
 ### Fixed

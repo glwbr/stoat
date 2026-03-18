@@ -246,6 +246,10 @@ func HelpBindings() []key.Binding {
 			key.WithHelp("ctrl+n/b", "next/prev page"),
 		),
 		key.NewBinding(
+			key.WithKeys("ctrl+1", "ctrl+2", "ctrl+3", "ctrl+4", "ctrl+5"),
+			key.WithHelp("ctrl+1-5", "switch tab"),
+		),
+		key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "edit cell"),
 		),

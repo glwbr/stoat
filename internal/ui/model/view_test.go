@@ -582,7 +582,7 @@ func TestExpandedOptionsHeight(t *testing.T) {
 				{key.NewBinding(key.WithKeys("j"), key.WithHelp("j", "down"))},
 				{key.NewBinding(key.WithKeys("k"), key.WithHelp("k", "up"))},
 				{key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "right"))},
-				{key.NewBinding(key.WithKeys(";"), key.WithHelp(";", "toggle help"))},
+				{key.NewBinding(key.WithKeys(";"), key.WithHelp(";", "help"))},
 			},
 		},
 	}
