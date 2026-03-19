@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/jxdones/stoat/internal/database"
@@ -13,26 +14,26 @@ import (
 // call to out. It is intended for debug builds only — enable via --debug flag.
 type timingDataSource struct {
 	source DataSource
-	out    io.Writer
+	logger *slog.Logger
 }
 
 // WithTiming wraps source so that every method call is timed and written to out.
 func WithTiming(source DataSource, out io.Writer) DataSource {
-	return &timingDataSource{source: source, out: out}
+	logger := slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	return &timingDataSource{source: source, logger: logger}
 }
 
-// logTiming writes a single timing line to out. It is designed to be called
-// with defer so that start is captured at call-site and elapsed is computed
-// on return:
+// logTiming logs a method call duration. Designed to be called with defer so
+// that start is captured at call-site and elapsed is computed on return:
 //
 //	defer t.logTiming("MethodName", time.Now())
 func (t *timingDataSource) logTiming(method string, start time.Time) {
-	_, _ = fmt.Fprintf(t.out, "%s\t%s\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, time.Since(start))
+	t.logger.Debug(method, "elapsed", time.Since(start))
 }
 
-// logTimingWithTarget writes a timing line to out with the target included.
+// logTimingWithTarget logs a method call duration with the target included.
 func (t *timingDataSource) logTimingWithTarget(method, target string, start time.Time) {
-	_, _ = fmt.Fprintf(t.out, "%s\t%s(%s)\t%s\n", time.Now().Format("2006-01-02 15:04:05"), method, target, time.Since(start))
+	t.logger.Debug(method, "target", target, "elapsed", time.Since(start))
 }
 
 // DefaultDatabase returns the default database name.
