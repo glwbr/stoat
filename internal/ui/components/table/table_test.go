@@ -1066,3 +1066,158 @@ func Test_HelpBindings_includes_delete_row(t *testing.T) {
 	}
 	t.Error("HelpBindings() missing binding for d (delete row)")
 }
+
+func Test_recalculateWidthsFromRows(t *testing.T) {
+	tests := []struct {
+		name          string
+		columns       []Column
+		rows          []Row
+		wantMinWidths []int
+	}{
+		{
+			name: "no_rows_leaves_min_widths_unchanged",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 10},
+			},
+			rows:          nil,
+			wantMinWidths: []int{10},
+		},
+		{
+			name: "cell_wider_than_min_width_updates_it",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 4},
+			},
+			rows: []Row{
+				{"a": "hello world"},
+			},
+			wantMinWidths: []int{11},
+		},
+		{
+			name: "cell_narrower_than_min_width_leaves_it_unchanged",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 20},
+			},
+			rows: []Row{
+				{"a": "hi"},
+			},
+			wantMinWidths: []int{20},
+		},
+		{
+			name: "takes_max_across_all_rows",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 4},
+			},
+			rows: []Row{
+				{"a": "short"},
+				{"a": "much longer value"},
+				{"a": "mid"},
+			},
+			wantMinWidths: []int{17},
+		},
+		{
+			name: "cell_capped_at_column_content_max_width",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 4},
+			},
+			rows: []Row{
+				{"a": "this string is intentionally longer than fifty characters to exceed the cap"},
+			},
+			wantMinWidths: []int{columnContentMaxWidth},
+		},
+		{
+			name: "multiple_columns_each_measured_independently",
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 4},
+				{Key: "b", Title: "B", MinWidth: 4},
+			},
+			rows: []Row{
+				{"a": "wide value here", "b": "x"},
+			},
+			wantMinWidths: []int{15, 4},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{
+				columns: normalizeColumns(tt.columns),
+				rows:    tt.rows,
+			}
+			m.recalculateWidthsFromRows()
+			for i, want := range tt.wantMinWidths {
+				if m.columns[i].MinWidth != want {
+					t.Errorf("columns[%d].MinWidth = %d, want %d", i, m.columns[i].MinWidth, want)
+				}
+			}
+		})
+	}
+}
+
+func Test_visibleColumns_distributes_leftover_to_visible_columns(t *testing.T) {
+	// rowNumberWidth with 0 rows = max(len("1"), 2) = 2.
+	// space = width - (rowNumberWidth + columnGapWidth) = width - 3.
+	tests := []struct {
+		name         string
+		width        int
+		columns      []Column
+		wantWidthSum int
+	}{
+		{
+			name:  "two_equal_columns_share_leftover_evenly",
+			width: 80,
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 10},
+				{Key: "b", Title: "B", MinWidth: 10},
+			},
+			// space=77, natural=2*(10+1)=22, leftover=55
+			// extra per col = 55*10/20 = 27, widths=[37,37], sum=74
+			wantWidthSum: 74,
+		},
+		{
+			name:  "wider_column_gets_larger_share",
+			width: 80,
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 10},
+				{Key: "b", Title: "B", MinWidth: 20},
+			},
+			// space=77, natural=(10+1)+(20+1)=32, leftover=45
+			// extra[a]=45*10/30=15, extra[b]=45*20/30=30, widths=[25,50], sum=75
+			wantWidthSum: 75,
+		},
+		{
+			name:  "only_visible_columns_expand_when_more_exist",
+			width: 30,
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 10},
+				{Key: "b", Title: "B", MinWidth: 10},
+				{Key: "c", Title: "C", MinWidth: 10},
+			},
+			// space=27; a+b fit (usedSpace=22), c does not
+			// leftover=5, minWidthTotal=20
+			// extra per visible col = 5*10/20 = 2, widths=[12,12], sum=24
+			wantWidthSum: 24,
+		},
+		{
+			name:  "single_oversized_column_fills_viewport",
+			width: 20,
+			columns: []Column{
+				{Key: "a", Title: "A", MinWidth: 50},
+			},
+			// space=17, column oversized → force-fit, widths=[17], sum=17
+			wantWidthSum: 17,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(tt.columns, nil)
+			m.SetSize(tt.width, 10)
+			window := m.visibleColumns()
+			sum := 0
+			for _, w := range window.widths {
+				sum += w
+			}
+			if sum != tt.wantWidthSum {
+				t.Errorf("sum of display widths = %d, want %d", sum, tt.wantWidthSum)
+			}
+		})
+	}
+}

@@ -21,7 +21,8 @@ const (
 	tableMinWidth      = 20
 	tableMinHeight     = 2
 
-	columnMinWidthFloor = 4
+	columnMinWidthFloor   = 4
+	columnContentMaxWidth = 50
 
 	headerRowCount     = 1
 	rowNumberMinDigits = 2
@@ -62,9 +63,11 @@ type Column struct {
 // Row stores one record keyed by column key.
 type Row map[string]string
 
-// columnWindow represents a contiguous range of columns within the table.
+// columnWindow represents a contiguous range of columns within the table,
+// together with the final display width for each visible column.
 type columnWindow struct {
 	indices []int
+	widths  []int // display width per visible column, parallel to indices
 	start   int
 	end     int
 }
@@ -105,6 +108,7 @@ func (m *Model) SetColumns(columns []Column) {
 // SetRows replaces the dataset and keeps select/viewport valid.
 func (m *Model) SetRows(rows []Row) {
 	m.rows = rows
+	m.recalculateWidthsFromRows()
 	m.clampSelection()
 	m.ensureVisibleColumn()
 	m.ensureVisibleRow()
@@ -268,43 +272,44 @@ func HelpBindings() []key.Binding {
 func (m Model) View() tea.View {
 	window := m.visibleColumns()
 	lines := make([]string, 0, m.height)
-	lines = append(lines, m.renderHeader(window.indices))
-	lines = append(lines, m.renderBody(window.indices)...)
+	lines = append(lines, m.renderHeader(window))
+	lines = append(lines, m.renderBody(window)...)
 	content := lipgloss.NewStyle().Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
 	return tea.NewView(content)
 }
 
-// renderHeader renders the visible column titles with fixed width cells.
-func (m Model) renderHeader(columns []int) string {
-	parts := make([]string, 0, len(columns)+1)
+// renderHeader renders the visible column titles using the display widths from the window.
+func (m Model) renderHeader(window columnWindow) string {
+	parts := make([]string, 0, len(window.indices)+1)
 	headStyle := lipgloss.NewStyle().Foreground(theme.Current.TableHeader).Bold(true)
 	parts = append(parts, padOrTrim("#", m.rowNumberWidth(), headStyle))
-	for _, index := range columns {
+	for pos, index := range window.indices {
 		col := m.columns[index]
-		parts = append(parts, padOrTrim(col.Title, col.MinWidth, headStyle))
+		parts = append(parts, padOrTrim(col.Title, window.widths[pos], headStyle))
 	}
 	return strings.Join(parts, " ")
 }
 
 // renderBody renders the visible rows in the table viewport.
-func (m Model) renderBody(visibleColumns []int) []string {
+func (m Model) renderBody(window columnWindow) []string {
 	rowsAvailable := m.bodyRowsVisible()
 	lines := make([]string, 0, rowsAvailable)
 
-	for i := 0; i < rowsAvailable; i++ {
+	for i := range rowsAvailable {
 		rowIndex := m.rowOffset + i
 		if rowIndex >= len(m.rows) {
 			lines = append(lines, strings.Repeat(" ", max(1, m.width)))
 			continue
 		}
-		lines = append(lines, m.renderRow(rowIndex, visibleColumns))
+		lines = append(lines, m.renderRow(rowIndex, window))
 	}
 	return lines
 }
 
-// renderRow renders one row with both row and active-cell highlighting.
-func (m Model) renderRow(rowIndex int, columns []int) string {
-	parts := make([]string, 0, len(columns)+1)
+// renderRow renders one row with both row and active-cell highlighting,
+// using the display widths from the window.
+func (m Model) renderRow(rowIndex int, window columnWindow) string {
+	parts := make([]string, 0, len(window.indices)+1)
 	row := m.rows[rowIndex]
 
 	rowStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
@@ -314,7 +319,7 @@ func (m Model) renderRow(rowIndex int, columns []int) string {
 
 	rowNumber := rowIndex + uiIndexBase
 	parts = append(parts, padOrTrim(strconv.Itoa(rowNumber), m.rowNumberWidth(), rowStyle))
-	for _, columnIndex := range columns {
+	for pos, columnIndex := range window.indices {
 		column := m.columns[columnIndex]
 		cell := normalizeCellText(row[column.Key])
 		style := lipgloss.NewStyle().Foreground(theme.Current.TextPrimary)
@@ -326,7 +331,7 @@ func (m Model) renderRow(rowIndex int, columns []int) string {
 			style = lipgloss.NewStyle().Foreground(theme.Current.TabsActiveText).Background(theme.Current.TabsActiveBg).Bold(true)
 		}
 
-		parts = append(parts, padOrTrim(cell, column.MinWidth, style))
+		parts = append(parts, padOrTrim(cell, window.widths[pos], style))
 	}
 	return strings.Join(parts, " ")
 }
@@ -365,7 +370,7 @@ func compareColumn(a, b Column) int {
 	return 0
 }
 
-// clampSelection ensures the selection/cursor is within the bounds of the model
+// clampSelection ensures the selection/cursor is within the bounds of the model.
 func (m *Model) clampSelection() {
 	if len(m.rows) == 0 {
 		m.rowIndex = 0
@@ -388,7 +393,12 @@ func (m *Model) clampSelection() {
 	}
 }
 
-// visibleColumns returns the indices of the columns that fit in the current horizontal viewport.
+// visibleColumns returns a columnWindow describing which columns fit in the
+// current horizontal viewport starting from m.colOffset, along with their
+// final display widths. Any space left after placing columns at their natural
+// widths is distributed proportionally among the visible set. Wider columns
+// receive a larger share. A single oversized column is force-fitted and given
+// the full viewport width.
 func (m Model) visibleColumns() columnWindow {
 	indices := make([]int, 0, len(m.columns))
 	space := max(m.width-(m.rowNumberWidth()+columnGapWidth), minHorizontalSpace)
@@ -419,8 +429,30 @@ func (m Model) visibleColumns() columnWindow {
 		end++
 	}
 
+	// Compute final display widths for the visible columns.
+	// A force-fitted oversized column (usedSpace==0) fills the full viewport.
+	// Otherwise, leftover space is distributed proportionally by natural width.
+	widths := make([]int, len(indices))
+	if usedSpace == 0 && len(indices) == 1 {
+		widths[0] = space
+	} else {
+		leftover := space - usedSpace
+		minWidthTotal := 0
+		for _, i := range indices {
+			minWidthTotal += m.columns[i].MinWidth
+		}
+		for pos, i := range indices {
+			extra := 0
+			if minWidthTotal > 0 && leftover > 0 {
+				extra = leftover * m.columns[i].MinWidth / minWidthTotal
+			}
+			widths[pos] = m.columns[i].MinWidth + extra
+		}
+	}
+
 	return columnWindow{
 		indices: indices,
+		widths:  widths,
 		start:   start,
 		end:     end,
 	}
@@ -518,3 +550,20 @@ func parseBufferCount(buffer string) int {
 	}
 	return count
 }
+
+// recalculateWidthsFromRows updates each column's MinWidth based on the widest
+// cell value in the current rows, capped at columnContentMaxWidth. This ensures
+// columns are wide enough to show their content without truncation.
+func (m *Model) recalculateWidthsFromRows() {
+	for i, column := range m.columns {
+		maxWidth := column.MinWidth
+		for _, row := range m.rows {
+			cellWidth := len([]rune(normalizeCellText(row[column.Key])))
+			if cellWidth > maxWidth {
+				maxWidth = cellWidth
+			}
+		}
+		m.columns[i].MinWidth = min(maxWidth, columnContentMaxWidth)
+	}
+}
+
