@@ -13,15 +13,13 @@ import (
 )
 
 const (
-	sidebarSectionHeaderRows    = 2 // [ Databases ] + [ Tables ]
-	sidebarSectionGapRows       = 1 // visual padding between the two sections
-	sidebarOverflowMarker       = "…"
-	sidebarTruncateSuffix       = "…"
-	sidebarMinWidth             = 12
-	sidebarMinHeight            = 8
-	sidebarDBRowsDivisor        = 2 // databases viewport is capped to half list rows
-	sidebarMarkerSafeRows       = 2 // preserve selection when placing overflow markers
-	sidebarMarkerPreserveOffset = 1 // rows to shift marker inward when selection is at edge
+	sidebarSectionHeaderRows = 2 // [ Databases ] + [ Tables ]
+	sidebarSectionGapRows    = 1 // visual padding between the two sections
+	sidebarOverflowMarker    = "…"
+	sidebarTruncateSuffix    = "…"
+	sidebarMinWidth          = 12
+	sidebarMinHeight         = 8
+	sidebarDBRowsDivisor     = 2 // databases viewport is capped to half list rows
 )
 
 // Event represents an action or state change in the sidebar.
@@ -205,11 +203,11 @@ func (m Model) View() tea.View {
 
 	lines := make([]string, 0, innerHeight)
 	lines = append(lines, sectionTile(fit("[ Databases ]", contentWidth), m.focused && m.section == 0))
-	lines = append(lines, viewportLines(m.databaseLines(contentWidth), m.dbOffset, dbRows, contentWidth, m.selectedDB)...)
+	lines = append(lines, viewportLines(m.databaseLines(contentWidth), m.dbOffset, dbRows, contentWidth)...)
 	lines = append(lines, "")
 
 	lines = append(lines, sectionTile(fit("[ Tables ]", contentWidth), m.focused && m.section == 1))
-	lines = append(lines, viewportLines(m.tableLines(contentWidth), m.tableOffset, tableRows, contentWidth, m.selectedTable)...)
+	lines = append(lines, viewportLines(m.tableLines(contentWidth), m.tableOffset, tableRows, contentWidth)...)
 	for len(lines) < innerHeight {
 		lines = append(lines, "")
 	}
@@ -239,9 +237,10 @@ func HelpBindings() []key.Binding {
 }
 
 // viewportLines returns a slice of lines for the current viewport, with "…" markers
-// when content is scrolled above or below. Shifts marker inward when selection is at
-// the edge so the selected item stays visible.
-func viewportLines(lines []string, start, rows, contentWidth, selected int) []string {
+// pinned to the absolute first/last row when content overflows in that direction.
+// keepOffsetVisible ensures the selected item is never on the edge row when a marker
+// is present, so the selected item is always adjacent to — never behind — the marker.
+func viewportLines(lines []string, start, rows, contentWidth int) []string {
 	window := offsetWindowLines(lines, start, rows)
 	if rows <= 0 || len(window) == 0 || len(lines) <= rows {
 		return window
@@ -251,22 +250,11 @@ func viewportLines(lines []string, start, rows, contentWidth, selected int) []st
 	hasBelow := start+rows < len(lines)
 	marker := centeredOverflowMarker(contentWidth)
 
-	firstRow := 0
-	lastRow := rows - 1
-
 	if hasAbove {
-		topMarkerRow := firstRow
-		if rows > sidebarMarkerSafeRows && selected == start {
-			topMarkerRow = firstRow + sidebarMarkerPreserveOffset
-		}
-		window[topMarkerRow] = marker
+		window[0] = marker
 	}
 	if hasBelow {
-		bottomMarkerRow := lastRow
-		if rows > sidebarMarkerSafeRows && selected == start+lastRow {
-			bottomMarkerRow = lastRow - sidebarMarkerPreserveOffset
-		}
-		window[bottomMarkerRow] = marker
+		window[rows-1] = marker
 	}
 	return window
 }
@@ -280,13 +268,17 @@ func centeredOverflowMarker(contentWidth int) string {
 		Render(sidebarOverflowMarker)
 }
 
-// offsetWindowLines returns a slice of lines for the current viewport.
+// offsetWindowLines returns a copy of the lines visible in the current viewport.
+// A copy is returned so that callers can overwrite entries (e.g. overflow markers)
+// without mutating the original slice.
 func offsetWindowLines(lines []string, start, maxRows int) []string {
 	if maxRows <= 0 || len(lines) == 0 {
 		return nil
 	}
 	if len(lines) <= maxRows {
-		return lines
+		out := make([]string, len(lines))
+		copy(out, lines)
+		return out
 	}
 	if start < 0 {
 		start = 0
@@ -295,7 +287,9 @@ func offsetWindowLines(lines []string, start, maxRows int) []string {
 	if start > lastStart {
 		start = lastStart
 	}
-	return lines[start : start+maxRows]
+	out := make([]string, maxRows)
+	copy(out, lines[start:start+maxRows])
+	return out
 }
 
 // databaseLines returns the lines for the databases section.
@@ -501,7 +495,22 @@ func keepOffsetVisible(selected, maxRows, offset, total int) int {
 		offset = selected - maxRows + 1
 	}
 	maxOffset := max(0, total-maxRows)
-	return min(offset, maxOffset)
+	offset = min(offset, maxOffset)
+
+	// When overflow markers are present, ensure the selected item never lands on
+	// the edge row that the marker occupies. Only applies when the viewport is
+	// large enough to have at least one non-marker row visible on each side.
+	if maxRows > 2 {
+		if offset+maxRows < total && selected == offset+maxRows-1 {
+			// Items below: selected at last row — scroll down one so marker fits there.
+			offset = min(offset+1, maxOffset)
+		}
+		if offset > 0 && selected == offset {
+			// Items above: selected at first row — scroll up one so marker fits there.
+			offset = max(0, offset-1)
+		}
+	}
+	return offset
 }
 
 // sectionTile renders a section tile with the given title and active state.

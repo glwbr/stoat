@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sidebar overflow marker (`…`) is now always pinned to the edge of the list.** When the selected item was at the last visible row with more items below (or the first visible row with items above), the `…` was shifting inward, leaving table names visible past it. The marker now always appears at the absolute first or last visible row, and scrolling is adjusted so the selected item is always the row immediately adjacent to it.
+
 ## [0.10.1] - 2026-03-19
 
 ### Fixed

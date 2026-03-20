@@ -1,6 +1,7 @@
 package sidebar
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -363,4 +364,132 @@ func TestViewportLines_overflow_marker(t *testing.T) {
 	if !strings.Contains(plain, "…") {
 		t.Error("expected overflow marker … when many items and small height")
 	}
+}
+
+func isMarker(s string) bool {
+	return strings.Contains(testutil.StripANSI(s), "…")
+}
+
+func TestViewportLines_markerAlwaysAtEdge(t *testing.T) {
+	tests := []struct {
+		name            string
+		start           int
+		rows            int
+		selected        int
+		wantFirstMarker bool
+		wantLastMarker  bool
+	}{
+		{
+			name:            "no_overflow_no_marker",
+			start:           0,
+			rows:            5,
+			selected:        2,
+			wantFirstMarker: false,
+			wantLastMarker:  false,
+		},
+		{
+			name:            "items_below_selected_not_at_edge",
+			start:           0,
+			rows:            3,
+			selected:        1,
+			wantFirstMarker: false,
+			wantLastMarker:  true,
+		},
+		{
+			// regression: selected at the last visible row caused marker to shift up,
+			// leaving visible rows after the "…"
+			name:            "items_below_selected_at_last_row",
+			start:           0,
+			rows:            3,
+			selected:        2,
+			wantFirstMarker: false,
+			wantLastMarker:  true,
+		},
+		{
+			name:            "items_above_selected_not_at_edge",
+			start:           2,
+			rows:            3,
+			selected:        3,
+			wantFirstMarker: true,
+			wantLastMarker:  false,
+		},
+		{
+			// regression: selected at the first visible row caused marker to shift down,
+			// leaving visible rows before the "…"
+			name:            "items_above_selected_at_first_row",
+			start:           2,
+			rows:            3,
+			selected:        2,
+			wantFirstMarker: true,
+			wantLastMarker:  false,
+		},
+		{
+			name:            "items_above_and_below_markers_at_both_edges",
+			start:           1,
+			rows:            3,
+			selected:        2,
+			wantFirstMarker: true,
+			wantLastMarker:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Fresh slice per case: offsetWindowLines returns a subslice of the
+			// original, so marker writes would otherwise bleed between cases.
+			lines := []string{"a", "b", "c", "d", "e"}
+			got := viewportLines(lines, tt.start, tt.rows, 20)
+			if len(got) == 0 {
+				t.Fatal("viewportLines returned empty slice")
+			}
+			if isMarker(got[0]) != tt.wantFirstMarker {
+				t.Errorf("first row marker = %v, want %v", isMarker(got[0]), tt.wantFirstMarker)
+			}
+			if isMarker(got[len(got)-1]) != tt.wantLastMarker {
+				t.Errorf("last row marker = %v, want %v", isMarker(got[len(got)-1]), tt.wantLastMarker)
+			}
+		})
+	}
+}
+
+func TestSidebar_selectedItemVisibleAtScrollBoundaries(t *testing.T) {
+	// 15 tables, small sidebar so the list overflows and scrolling is required.
+	const tableCount = 15
+	tables := make([]string, tableCount)
+	for i := range tables {
+		tables[i] = fmt.Sprintf("table_%02d", i)
+	}
+	m := New([]string{"db1"}, map[string][]string{"db1": tables})
+	m.OpenSelectedDatabase()
+	m.SetSize(20, 15)
+
+	t.Run("selected_last_table_visible_marker_before_it", func(t *testing.T) {
+		m.MoveToBottom()
+		plain := testutil.StripANSI(m.View().Content)
+
+		if !strings.Contains(plain, "table_14") {
+			t.Error("last table should be visible after MoveToBottom")
+		}
+		markerIdx := strings.LastIndex(plain, "…")
+		selectedIdx := strings.Index(plain, "table_14")
+		if markerIdx != -1 && markerIdx > selectedIdx {
+			t.Errorf("overflow marker appears after selected item (marker at %d, selected at %d)", markerIdx, selectedIdx)
+		}
+	})
+
+	t.Run("selected_first_table_visible_marker_after_it", func(t *testing.T) {
+		// Scroll to bottom first so there are items above when we go back to top.
+		m.MoveToBottom()
+		m.MoveToTop()
+		plain := testutil.StripANSI(m.View().Content)
+
+		if !strings.Contains(plain, "table_00") {
+			t.Error("first table should be visible after MoveToTop")
+		}
+		markerIdx := strings.Index(plain, "…")
+		selectedIdx := strings.Index(plain, "table_00")
+		if markerIdx != -1 && markerIdx < selectedIdx {
+			t.Errorf("overflow marker appears before selected item (marker at %d, selected at %d)", markerIdx, selectedIdx)
+		}
+	})
 }
