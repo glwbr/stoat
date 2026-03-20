@@ -104,6 +104,10 @@ func (m mockDataSource) DefaultDatabase(ctx context.Context) (string, error) {
 	return "main", nil
 }
 
+func (m mockDataSource) UsesSchemaQualification() bool {
+	return false
+}
+
 func TestView_Smoke(t *testing.T) {
 	m := New()
 	m.view.width = 80

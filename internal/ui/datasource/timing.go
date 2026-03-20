@@ -88,6 +88,11 @@ func (t *timingDataSource) ForeignKeys(ctx context.Context, target database.Data
 	return t.source.ForeignKeys(ctx, target)
 }
 
+// UsesSchemaQualification delegates to the underlying source.
+func (t *timingDataSource) UsesSchemaQualification() bool {
+	return t.source.UsesSchemaQualification()
+}
+
 // Close closes the connection.
 func (t *timingDataSource) Close() error {
 	defer t.logTiming("Close", time.Now())

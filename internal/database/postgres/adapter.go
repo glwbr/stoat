@@ -106,3 +106,9 @@ func (c *connection) ForeignKeys(ctx context.Context, target database.DatabaseTa
 func (c *connection) DefaultDatabase(ctx context.Context) (string, error) {
 	return "public", nil
 }
+
+// UsesSchemaQualification reports that Postgres write queries must prefix table
+// names with the active schema (e.g. "public"."users").
+func (c *connection) UsesSchemaQualification() bool {
+	return true
+}

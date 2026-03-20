@@ -11,5 +11,6 @@ type Connection interface {
 	Constraints(ctx context.Context, target DatabaseTarget) ([]Constraint, error)
 	ForeignKeys(ctx context.Context, target DatabaseTarget) ([]ForeignKey, error)
 	DefaultDatabase(ctx context.Context) (string, error)
+	UsesSchemaQualification() bool
 	Close() error
 }

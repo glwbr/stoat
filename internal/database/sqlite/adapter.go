@@ -102,3 +102,9 @@ func (c *connection) DefaultDatabase(_ context.Context) (string, error) {
 	}
 	return filepath.Base(c.path), nil
 }
+
+// UsesSchemaQualification reports that SQLite write queries do not prefix table
+// names with a schema. SQLite has no named schema concept in generated queries.
+func (c *connection) UsesSchemaQualification() bool {
+	return false
+}

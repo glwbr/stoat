@@ -146,6 +146,7 @@ func TestQuoteIdentifier(t *testing.T) {
 func TestBuildUpdateQueryFromCell(t *testing.T) {
 	tests := []struct {
 		name         string
+		schema       string
 		table        string
 		setColumn    string
 		setColType   string
@@ -308,10 +309,44 @@ func TestBuildUpdateQueryFromCell(t *testing.T) {
 				`= 'x'`,
 			},
 		},
+		{
+			name:         "postgres_schema_qualifies_table",
+			schema:       "public",
+			table:        "users",
+			setColumn:    "name",
+			setColType:   "text",
+			setValue:     "bob",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "1", "name": "alice"},
+			colTypeByKey: map[string]string{"id": "integer", "name": "text"},
+			want: []string{
+				`UPDATE "public"."users"`,
+				`SET "name" = 'bob'`,
+				`WHERE "id" = 1`,
+			},
+			notWant: []string{`UPDATE "users"`},
+		},
+		{
+			name:         "non_public_schema_qualifies_table",
+			schema:       "analytics",
+			table:        "events",
+			setColumn:    "status",
+			setColType:   "text",
+			setValue:     "done",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "7", "status": "pending"},
+			colTypeByKey: map[string]string{"id": "integer", "status": "text"},
+			want: []string{
+				`UPDATE "analytics"."events"`,
+				`SET "status" = 'done'`,
+				`WHERE "id" = 7`,
+			},
+			notWant: []string{`UPDATE "events"`},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildUpdateQueryFromCell(tt.table, tt.setColumn, tt.setColType, tt.setValue, tt.pkColumns, tt.row, tt.colTypeByKey)
+			got := BuildUpdateQueryFromCell(tt.schema, tt.table, tt.setColumn, tt.setColType, tt.setValue, tt.pkColumns, tt.row, tt.colTypeByKey)
 			for _, sub := range tt.want {
 				if !strings.Contains(got, sub) {
 					t.Errorf("BuildUpdateQueryFromCell(...) result must contain %q.\nGot:\n%s", sub, got)
@@ -329,6 +364,7 @@ func TestBuildUpdateQueryFromCell(t *testing.T) {
 func TestBuildDeleteQuery(t *testing.T) {
 	tests := []struct {
 		name         string
+		schema       string
 		table        string
 		pkColumns    []string
 		row          map[string]string
@@ -412,10 +448,30 @@ func TestBuildDeleteQuery(t *testing.T) {
 			colTypeByKey: map[string]string{`"; DROP TABLE t; --`: "integer"},
 			want:         []string{`DELETE FROM "t"`, `WHERE "`},
 		},
+		{
+			name:         "postgres_schema_qualifies_table",
+			schema:       "public",
+			table:        "users",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "5", "name": "alice"},
+			colTypeByKey: map[string]string{"id": "integer", "name": "text"},
+			want:         []string{`DELETE FROM "public"."users"`, `WHERE "id" = 5;`},
+			notWant:      []string{`DELETE FROM "users"`},
+		},
+		{
+			name:         "non_public_schema_qualifies_table",
+			schema:       "myapp",
+			table:        "orders",
+			pkColumns:    []string{"id"},
+			row:          map[string]string{"id": "99"},
+			colTypeByKey: map[string]string{"id": "integer"},
+			want:         []string{`DELETE FROM "myapp"."orders"`, `WHERE "id" = 99;`},
+			notWant:      []string{`DELETE FROM "orders"`},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildDeleteQuery(tt.table, tt.pkColumns, tt.row, tt.colTypeByKey)
+			got := BuildDeleteQuery(tt.schema, tt.table, tt.pkColumns, tt.row, tt.colTypeByKey)
 			for _, sub := range tt.want {
 				if !strings.Contains(got, sub) {
 					t.Errorf("BuildDeleteQuery(...) result must contain %q.\nGot:\n%s", sub, got)

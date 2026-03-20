@@ -16,6 +16,7 @@ type DataSource interface {
 	Constraints(ctx context.Context, target database.DatabaseTarget) ([]database.Constraint, error)
 	ForeignKeys(ctx context.Context, target database.DatabaseTarget) ([]database.ForeignKey, error)
 	DefaultDatabase(ctx context.Context) (string, error)
+	UsesSchemaQualification() bool
 	Close() error
 }
 
@@ -75,4 +76,9 @@ func (s *connectionSource) Close() error {
 // DefaultDatabase returns the default database name.
 func (s *connectionSource) DefaultDatabase(ctx context.Context) (string, error) {
 	return s.conn.DefaultDatabase(ctx)
+}
+
+// UsesSchemaQualification delegates to the underlying connection.
+func (s *connectionSource) UsesSchemaQualification() bool {
+	return s.conn.UsesSchemaQualification()
 }

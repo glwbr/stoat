@@ -281,7 +281,7 @@ func (m Model) handleInlineEditConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd,
 	if target == m.tablePKTarget && len(m.tablePKColumns) > 0 {
 		pkColumns = m.tablePKColumns
 	}
-	q := BuildUpdateQueryFromCell(tableName, col.Key, col.Type, newValue, pkColumns, activeRow, colTypeByKey)
+	q := BuildUpdateQueryFromCell(m.schemaForWrites(), tableName, col.Key, col.Type, newValue, pkColumns, activeRow, colTypeByKey)
 	m.pendingTableReload = true
 	spinnerCmd := m.statusbar.StartSpinner("Running update", statusbar.Info)
 	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(q)), true
@@ -868,7 +868,7 @@ func (m Model) handleDeleteConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, boo
 	if target == m.tablePKTarget && len(m.tablePKColumns) > 0 {
 		pkColumns = m.tablePKColumns
 	}
-	q := BuildDeleteQuery(tableName, pkColumns, activeRow, colTypeByKey)
+	q := BuildDeleteQuery(m.schemaForWrites(), tableName, pkColumns, activeRow, colTypeByKey)
 	m.pendingTableReload = true
 	spinnerCmd := m.statusbar.StartSpinner("Deleting row", statusbar.Info)
 	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(q)), true
@@ -885,6 +885,18 @@ func (m Model) handleDeleteCancel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool
 	m.pendingDeleteConfirm = false
 	m.applyViewState()
 	return m, nil, true
+}
+
+// schemaForWrites returns the SQL schema to use when generating write queries
+// (UPDATE, DELETE). For Postgres, this is the active sidebar schema so that
+// generated queries use "schema"."table" and are not sensitive to search_path.
+// For SQLite (and any source that does not use schema qualification) it returns
+// empty string, leaving the table reference unqualified.
+func (m Model) schemaForWrites() string {
+	if m.source == nil || !m.source.UsesSchemaQualification() {
+		return ""
+	}
+	return m.sidebar.EffectiveDB()
 }
 
 // queryPreviewForHeader returns a one-line, truncated preview of the query for the header.

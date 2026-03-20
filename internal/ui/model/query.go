@@ -31,21 +31,32 @@ func formatSQLValue(colType, value string) string {
 	}
 }
 
-// quoteIdentifier quotes a SQLite identifier so it is safe to use in generated SQL.
+// quoteIdentifier quotes a SQL identifier so it is safe to use in generated SQL.
 // It wraps the name in double quotes and escapes any internal " by doubling it.
 // This prevents invalid syntax for names with spaces/special chars and SQL keywords.
 func quoteIdentifier(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
+// tableRef returns a safe SQL table reference. When schema is non-empty the
+// result is "schema"."table" (used for Postgres); otherwise just "table".
+func tableRef(schema, table string) string {
+	if schema == "" {
+		return quoteIdentifier(table)
+	}
+	return quoteIdentifier(schema) + "." + quoteIdentifier(table)
+}
+
 // BuildUpdateQueryFromCell builds a SQL UPDATE query from the selected cell.
-// setColumn/setColType/setValue are the column being edited and its new value.
-// When pkColumns is non-empty and row has the current row, WHERE is built from primary key
-// so only one row is updated. Otherwise WHERE uses the edited column (may match multiple rows).
+// schema is the SQL schema prefix; pass empty string for databases that do not
+// use schema qualification (SQLite). setColumn/setColType/setValue are the column
+// being edited and its new value. When pkColumns is non-empty and row has the
+// current row, WHERE is built from primary key so only one row is updated.
+// Otherwise WHERE uses the edited column (may match multiple rows).
 // colTypeByKey maps column key to type for formatting literals (e.g. "id" -> "integer").
-func BuildUpdateQueryFromCell(table, setColumn, setColType, setValue string, pkColumns []string, row map[string]string, colTypeByKey map[string]string) string {
+func BuildUpdateQueryFromCell(schema, table, setColumn, setColType, setValue string, pkColumns []string, row map[string]string, colTypeByKey map[string]string) string {
 	setLiteral := formatSQLValue(setColType, setValue)
-	tbl := quoteIdentifier(table)
+	tbl := tableRef(schema, table)
 	col := quoteIdentifier(setColumn)
 
 	var whereClause string
@@ -79,11 +90,13 @@ func BuildUpdateQueryFromCell(table, setColumn, setColType, setValue string, pkC
 }
 
 // BuildDeleteQuery builds a SQL DELETE query for the active row.
-// When pkColumns is non-empty, WHERE is built from primary key columns so only one row is deleted.
-// Otherwise WHERE matches all column values in the row (may match multiple rows if data is not unique).
+// schema is the SQL schema prefix; pass empty string for databases that do not
+// use schema qualification (SQLite). When pkColumns is non-empty, WHERE is built
+// from primary key columns so only one row is deleted. Otherwise WHERE matches
+// all column values in the row (may match multiple rows if data is not unique).
 // colTypeByKey maps column key to type for formatting literals (e.g. "id" -> "integer").
-func BuildDeleteQuery(tableName string, pkColumns []string, row map[string]string, colTypeByKey map[string]string) string {
-	tbl := quoteIdentifier(tableName)
+func BuildDeleteQuery(schema, tableName string, pkColumns []string, row map[string]string, colTypeByKey map[string]string) string {
+	tbl := tableRef(schema, tableName)
 
 	var whereClause string
 	usePK := len(pkColumns) > 0 && row != nil && colTypeByKey != nil
