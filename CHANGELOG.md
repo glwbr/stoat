@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Paste now works in inline cell edit mode.** Pressing the system paste shortcut while editing a cell inline now inserts the clipboard content at the cursor position.
+
 ## [0.10.2] - 2026-03-20
 
 ### Added

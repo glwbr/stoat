@@ -536,6 +536,11 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handlePasteMsg handles the PasteMsg and updates the focused component.
 func (m Model) handlePasteMsg(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	if m.inlineEditMode {
+		next, cmd := m.editbox.Update(msg)
+		m.editbox = next
+		return m, cmd
+	}
 	switch m.view.focus {
 	case FocusQuerybox:
 		next, cmd := m.querybox.Update(msg)

@@ -1176,3 +1176,44 @@ func TestHandleApplyFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlePasteMsg_InlineEditMode(t *testing.T) {
+	tests := []struct {
+		name           string
+		inlineEditMode bool
+		initialValue   string
+		pasteContent   string
+		wantValue      string
+	}{
+		{
+			name:           "paste_appended_when_in_inline_edit_mode",
+			inlineEditMode: true,
+			initialValue:   "hello",
+			pasteContent:   " world",
+			wantValue:      "hello world",
+		},
+		{
+			name:           "paste_ignored_when_not_in_inline_edit_mode",
+			inlineEditMode: false,
+			initialValue:   "hello",
+			pasteContent:   " world",
+			wantValue:      "hello",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			m.inlineEditMode = tt.inlineEditMode
+			m.editbox.SetValue(tt.initialValue)
+			if tt.inlineEditMode {
+				m.editbox.Focus()
+			}
+
+			next, _ := m.handlePasteMsg(tea.PasteMsg{Content: tt.pasteContent})
+			got := next.(Model)
+			if got.editbox.Value() != tt.wantValue {
+				t.Errorf("editbox value = %q, want %q", got.editbox.Value(), tt.wantValue)
+			}
+		})
+	}
+}
