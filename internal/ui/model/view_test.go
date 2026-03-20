@@ -166,6 +166,24 @@ func TestRenderHeader(t *testing.T) {
 			width:        60,
 			wantContains: []string{"0 rows"},
 		},
+		{
+			name: "has_more_pages_shows_plus_after_page_number",
+			setup: func(m *Model) {
+				m.paging.currentHasMore = true
+				m.paging.afterStack = []string{"", "cursor1"}
+			},
+			width:        60,
+			wantContains: []string{"page 2+"},
+		},
+		{
+			name: "no_more_pages_omits_plus",
+			setup: func(m *Model) {
+				m.paging.currentHasMore = false
+				m.paging.afterStack = []string{"", "cursor1"}
+			},
+			width:        60,
+			wantContains: []string{"page 2 |"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -269,6 +287,7 @@ func TestRenderDetail(t *testing.T) {
 		setupTable   func(*Model)
 		width        int
 		wantContains []string
+		wantAbsent   []string
 	}{
 		{
 			name: "no_cell_shows_placeholder",
@@ -320,6 +339,25 @@ func TestRenderDetail(t *testing.T) {
 			width:        20,
 			wantContains: []string{"Ln 1", "Col 1"},
 		},
+		{
+			name: "schema_tab_uses_schema_table_not_main_table",
+			setupTable: func(m *Model) {
+				m.table = table.New(
+					[]table.Column{{Key: "id", Title: "id", Type: "int", MinWidth: 2, Order: 1}},
+					[]table.Row{{"id": "42"}},
+				)
+				m.table.SetSize(20, 5)
+				m.schemaTable = table.New(
+					[]table.Column{{Key: "col_type", Title: "col_type", Type: "text", MinWidth: 8, Order: 1}},
+					[]table.Row{{"col_type": "varchar(255)"}},
+				)
+				m.schemaTable.SetSize(20, 5)
+				m.tabs.SetActive(1) // Columns tab
+			},
+			width:        80,
+			wantContains: []string{"field: col_type", "value: varchar(255)"},
+			wantAbsent:   []string{"type:"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -334,6 +372,11 @@ func TestRenderDetail(t *testing.T) {
 			for _, sub := range tt.wantContains {
 				if !strings.Contains(got, sub) {
 					t.Errorf("renderDetail() should contain %q; got %q", sub, got)
+				}
+			}
+			for _, sub := range tt.wantAbsent {
+				if strings.Contains(got, sub) {
+					t.Errorf("renderDetail() should not contain %q; got %q", sub, got)
 				}
 			}
 		})

@@ -216,7 +216,11 @@ func (m Model) renderHeader(width int) string {
 		pageNum = 0
 	}
 
-	showing := fmt.Sprintf("page %d | %d %s", pageNum, rowsShown, rowsWord)
+	hasMore := ""
+	if m.paging.currentHasMore {
+		hasMore = "+"
+	}
+	showing := fmt.Sprintf("page %d%s | %d %s", pageNum, hasMore, rowsShown, rowsWord)
 
 	line2 := lipgloss.NewStyle().Foreground(theme.Current.TextHeader).Render(
 		"columns: " + strconv.Itoa(m.table.ColumnCount()) + ", visible: " + strconv.Itoa(m.table.VisibleColumnCount()) + " | " + showing,
@@ -251,8 +255,12 @@ func (m Model) renderDetail(width int) string {
 		return m.renderDetailDelete(width)
 	}
 
-	line, col := m.table.CursorPosition()
-	column, value, ok := m.table.ActiveCell()
+	activeDetailTable := m.table
+	if m.tabs.ActiveTab() != "Records" {
+		activeDetailTable = m.schemaTable
+	}
+	line, col := activeDetailTable.CursorPosition()
+	column, value, ok := activeDetailTable.ActiveCell()
 
 	if !ok {
 		txt := lipgloss.NewStyle().Foreground(theme.Current.TextMuted).Render("Ln 0, Col 0 | field: - | type: - | value: -")
@@ -266,9 +274,14 @@ func (m Model) renderDetail(width int) string {
 
 	head := lipgloss.NewStyle().Foreground(theme.Current.TextPrimary).Render(fmt.Sprintf("Ln %d, Col %d", line, col))
 	field := lipgloss.NewStyle().Foreground(theme.Current.TextAccent).Render(column.Title)
-	typ := lipgloss.NewStyle().Foreground(theme.Current.TextWarning).Render(fieldType)
 
-	plain := fmt.Sprintf("%s | field: %s | type: %s | value: %s", ansi.Strip(head), ansi.Strip(field), ansi.Strip(typ), value)
+	var plain string
+	if m.tabs.ActiveTab() == "Records" {
+		typ := lipgloss.NewStyle().Foreground(theme.Current.TextWarning).Render(fieldType)
+		plain = fmt.Sprintf("%s | field: %s | type: %s | value: %s", ansi.Strip(head), ansi.Strip(field), ansi.Strip(typ), value)
+	} else {
+		plain = fmt.Sprintf("%s | field: %s | value: %s", ansi.Strip(head), ansi.Strip(field), value)
+	}
 	trimmed := ansi.Truncate(plain, max(0, width-2), "…")
 	return lipgloss.NewStyle().Width(common.ClampMin(width, 1)).Padding(0, 1).
 		Render(lipgloss.NewStyle().Foreground(theme.Current.TextMuted).Render(trimmed))

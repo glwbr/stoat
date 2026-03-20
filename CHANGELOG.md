@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-03-20
+
+### Added
+
+- **Pagination indicator now shows `+` when more pages exist.** The header line (e.g. `page 2 | 100 rows`) now reads `page 2+ | 100 rows` when there is a next page, making it clear without navigating forward.
+- **Schema tab detail bar now reflects the focused schema cell.** When on the Columns, Constraints, Indexes, or Foreign Keys tabs, the detail bar at the bottom now shows the cursor position and value of the focused cell in the schema table instead of the main data table. The `type` field is omitted on schema tabs since it is not meaningful there.
+
 ### Fixed
 
 - **Sidebar overflow marker (`…`) is now always pinned to the edge of the list.** When the selected item was at the last visible row with more items below (or the first visible row with items above), the `…` was shifting inward, leaving table names visible past it. The marker now always appears at the absolute first or last visible row, and scrolling is adjusted so the selected item is always the row immediately adjacent to it.
