@@ -315,6 +315,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.statusbar.SetStatusWithTTL(" Copied to clipboard", statusbar.Success, 2*time.Second)
 		return m, cmd
+	case EditorCellMsg:
+		if next, cmd, handled := m.handleUpdateCellFromEditor(msg); handled {
+			return next, cmd
+		}
+		return m, nil
 	default:
 		cmd := m.statusbar.Update(msg)
 		return m, cmd

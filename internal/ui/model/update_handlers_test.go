@@ -1217,3 +1217,162 @@ func TestHandlePasteMsg_InlineEditMode(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleUpdateCellFromEditor(t *testing.T) {
+	tests := []struct {
+		name              string
+		setup             func(*Model)
+		wantHandled       bool
+		wantCmd           bool
+		wantPendingReload bool
+		msg               EditorCellMsg
+	}{
+		{
+			name:              "runs_update_query_when_value_is_changed",
+			wantHandled:       true,
+			wantCmd:           true,
+			wantPendingReload: true,
+			msg:               EditorCellMsg{Value: "Bob", Err: nil},
+		},
+		{
+			name:              "skips_query_when_value_is_unchanged",
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingReload: false,
+			msg:               EditorCellMsg{Value: "Alice", Err: nil},
+		},
+		{
+			name: "returns_handled_with_error_on_editor_error",
+			setup: func(m *Model) {
+				m.inlineEditMode = false
+			},
+			wantHandled:       true,
+			wantCmd:           true, // TTL status cmd
+			wantPendingReload: false,
+			msg:               EditorCellMsg{Err: errors.New("editor failed")},
+		},
+		{
+			name: "blocked_when_viewing_query_result",
+			setup: func(m *Model) {
+				m.viewingQueryResult = true
+			},
+			wantHandled:       true,
+			wantCmd:           true, // TTL status cmd
+			wantPendingReload: false,
+			msg:               EditorCellMsg{Value: "Bob"},
+		},
+		{
+			name: "blocked_when_read_only",
+			setup: func(m *Model) {
+				m.readOnly = true
+			},
+			wantHandled:       true,
+			wantCmd:           true, // TTL status cmd
+			wantPendingReload: false,
+			msg:               EditorCellMsg{Value: "Bob"},
+		},
+		{
+			name: "blocked_when_tab_is_not_records",
+			setup: func(m *Model) {
+				m.tabs.SetActive(1) // Columns
+			},
+			wantHandled:       false,
+			wantCmd:           false,
+			wantPendingReload: false,
+			msg:               EditorCellMsg{Value: "Bob"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWithTableFocusAndData()
+			m.SetDataSource(mockDataSource{})
+			if tt.setup != nil {
+				tt.setup(&m)
+			}
+			got, cmd, handled := m.handleUpdateCellFromEditor(tt.msg)
+			next := got.(Model)
+			if handled != tt.wantHandled {
+				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("expected non-nil cmd, got nil")
+			}
+			if !tt.wantCmd && cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+			if next.pendingTableReload != tt.wantPendingReload {
+				t.Errorf("pendingTableReload = %v, want %v", next.pendingTableReload, tt.wantPendingReload)
+			}
+		})
+	}
+}
+
+func TestHandleOpenCellEditor(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(*Model)
+		key         string
+		wantHandled bool
+		wantCmd     bool
+	}{
+		{
+			name:        "e_with_table_focused_fires_editor_cmd",
+			key:         "e",
+			wantHandled: true,
+			wantCmd:     true,
+		},
+		{
+			name: "e_blocked_when_not_table_focused",
+			setup: func(m *Model) {
+				m.view.focus = FocusQuerybox
+			},
+			key:         "e",
+			wantHandled: false,
+			wantCmd:     false,
+		},
+		{
+			name: "e_blocked_when_viewing_query_result",
+			setup: func(m *Model) {
+				m.viewingQueryResult = true
+			},
+			key:         "e",
+			wantHandled: true,
+			wantCmd:     true, // TTL status cmd
+		},
+		{
+			name: "e_blocked_when_tab_is_not_records",
+			setup: func(m *Model) {
+				m.tabs.SetActive(1) // Columns
+			},
+			key:         "e",
+			wantHandled: false,
+			wantCmd:     false,
+		},
+		{
+			name:        "non_e_key_returns_unhandled",
+			key:         "x",
+			wantHandled: false,
+			wantCmd:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := modelWithTableFocusAndData()
+			if tt.setup != nil {
+				tt.setup(&m)
+			}
+			_, cmd, handled := m.handleOpenCellEditor(keyMsg(tt.key))
+			if handled != tt.wantHandled {
+				t.Errorf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if tt.wantCmd && cmd == nil {
+				t.Error("expected non-nil cmd, got nil")
+			}
+			if !tt.wantCmd && cmd != nil {
+				t.Errorf("expected nil cmd, got %v", cmd)
+			}
+		})
+	}
+}

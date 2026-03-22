@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Edit any cell in an external editor.** Press `e` on a focused table cell to open it in `$EDITOR` (falling back to `vim`). The editor is pre-populated with the current cell value. Saving and closing fires an UPDATE; quitting without changes is a no-op. JSON and JSONB values are automatically pretty-printed before opening and minified back on save.
+
 ## [0.11.0] - 2026-03-20
 
 ### Added

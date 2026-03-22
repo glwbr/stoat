@@ -258,6 +258,10 @@ func HelpBindings() []key.Binding {
 			key.WithHelp("enter", "edit cell"),
 		),
 		key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "open cell in editor"),
+		),
+		key.NewBinding(
 			key.WithKeys("y"),
 			key.WithHelp("y", "copy cell value"),
 		),
@@ -566,4 +570,3 @@ func (m *Model) recalculateWidthsFromRows() {
 		m.columns[i].MinWidth = min(maxWidth, columnContentMaxWidth)
 	}
 }
-

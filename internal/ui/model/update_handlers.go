@@ -374,6 +374,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			func(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 				return m.handleDeleteRow(msg, prevKey)
 			},
+			m.handleOpenCellEditor,
 			m.handleQueryShortcut,
 			m.handlePagingShortcut,
 			m.handleExpandSavedQuery,
@@ -885,6 +886,62 @@ func (m Model) handleDeleteCancel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool
 	m.pendingDeleteConfirm = false
 	m.applyViewState()
 	return m, nil, true
+}
+
+// handleOpenCellEditor opens the cell editor for the active cell.
+func (m Model) handleOpenCellEditor(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	if msg.String() != "e" || m.view.focus != FocusTable {
+		return m, nil, false
+	}
+	if m.tabs.ActiveTab() != "Records" {
+		return m, nil, false
+	}
+	if m.viewingQueryResult {
+		cmd := m.statusbar.SetStatusWithTTL(" Query results are read-only", statusbar.Warning, 2*time.Second)
+		return m, cmd, true
+	}
+
+	column, value, ok := m.table.ActiveCell()
+	if !ok {
+		return m, nil, false
+	}
+	return m, OpenEditorWithCellValueCmd(value, column.Type), true
+}
+
+// handleUpdateCellFromEditor handles the update from cell editor.
+func (m Model) handleUpdateCellFromEditor(msg EditorCellMsg) (tea.Model, tea.Cmd, bool) {
+	if msg.Err != nil {
+		cmd := m.statusbar.SetStatusWithTTL(" Edit failed: "+msg.Err.Error(), statusbar.Error, 2*time.Second)
+		return m, cmd, true
+	}
+	if m.tabs.ActiveTab() != "Records" {
+		return m, nil, false
+	}
+	if m.readOnly {
+		cmd := m.statusbar.SetStatusWithTTL(" Read-only mode: write queries are not allowed", statusbar.Warning, 3*time.Second)
+		return m, cmd, true
+	}
+	if m.viewingQueryResult {
+		cmd := m.statusbar.SetStatusWithTTL(" Query results are read-only", statusbar.Warning, 2*time.Second)
+		return m, cmd, true
+	}
+
+	db := m.sidebar.EffectiveDB()
+	tableName := m.sidebar.SelectedTable()
+	activeRow, _ := m.table.ActiveRow()
+	column, value, ok := m.table.ActiveCell()
+	if !ok || db == "" || tableName == "" || msg.Value == value {
+		return m, nil, false
+	}
+	colTypeByKey := make(map[string]string)
+	for _, c := range m.table.Columns() {
+		colTypeByKey[c.Key] = c.Type
+	}
+
+	m.pendingTableReload = true
+	query := BuildUpdateQueryFromCell(m.schemaForWrites(), tableName, column.Key, column.Type, msg.Value, m.tablePKColumns, activeRow, colTypeByKey)
+	spinnerCmd := m.statusbar.StartSpinner("Running update", statusbar.Info)
+	return m, tea.Batch(spinnerCmd, RequestQueryRunCmd(query)), true
 }
 
 // schemaForWrites returns the SQL schema to use when generating write queries

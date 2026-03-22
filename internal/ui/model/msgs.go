@@ -1,9 +1,12 @@
 package model
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -80,6 +83,11 @@ type ForeignKeysLoadedMsg struct {
 // CopyDoneMsg is sent when the copy operation is done.
 type CopyDoneMsg struct {
 	Err error
+}
+
+type EditorCellMsg struct {
+	Value string
+	Err   error
 }
 
 // ConnectingMsg is sent immediately when an async connection is requested.
@@ -263,4 +271,79 @@ func ConnectCmd(cfg database.Config) tea.Cmd {
 			readOnly: cfg.ReadOnly,
 		}
 	}
+}
+
+// OpenEditorWithCellValueCmd opens the editor with the given value and type name.
+// If the type name contains "json", the value is assumed to be JSON and will be
+// formatted with indentation. If the type name does not contain "json", the value
+// is assumed to be text and will be saved as a text file.
+func OpenEditorWithCellValueCmd(value, typeName string) tea.Cmd {
+	fileName := "stoat-cell-editor-*"
+	isJson := false
+	if strings.Contains(typeName, "json") {
+		isJson = true
+		fileName += ".json"
+	} else {
+		fileName += ".txt"
+	}
+
+	f, err := os.CreateTemp("", fileName)
+	if err != nil {
+		return func() tea.Msg {
+			return EditorCellMsg{Err: err}
+		}
+	}
+
+	if isJson {
+		var v any
+		if err := json.Unmarshal([]byte(value), &v); err == nil {
+			if jsonValue, err := json.MarshalIndent(v, "", "  "); err == nil {
+				value = string(jsonValue)
+			}
+		}
+	}
+
+	_, err = f.WriteString(value)
+	if err != nil {
+		f.Close()
+		_ = os.Remove(f.Name())
+		return func() tea.Msg {
+			return EditorCellMsg{Err: err}
+		}
+	}
+
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return func() tea.Msg {
+			return EditorCellMsg{Err: err}
+		}
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vim"
+	}
+
+	cmd := exec.Command(editor, path)
+	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
+		content, readErr := os.ReadFile(path)
+		_ = os.Remove(path)
+		if execErr != nil {
+			return EditorCellMsg{Err: execErr}
+		}
+		if readErr != nil {
+			return EditorCellMsg{Err: readErr}
+		}
+
+		// Remove trailing newline from editor's saving behavior
+		contentStr := strings.TrimRight(string(content), "\n")
+		if isJson {
+			var buf bytes.Buffer
+			if err := json.Compact(&buf, []byte(contentStr)); err == nil {
+				contentStr = buf.String()
+			}
+		}
+		return EditorCellMsg{Value: contentStr, Err: nil}
+	})
 }
