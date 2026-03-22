@@ -161,7 +161,7 @@ func Query(ctx context.Context, db *sql.DB, query string) (database.QueryResult,
 	columnNames := make([]string, 0)
 	resultRows := make([]database.Row, 0, min(maxRows, queryResultCap))
 
-	firstKeyword := strings.Fields(strings.TrimSpace(strings.ToUpper(query)))[0]
+	firstKeyword := firstSQLKeyword(query)
 	shouldReturnRows := firstKeyword == "SELECT" || firstKeyword == "EXPLAIN"
 	if shouldReturnRows {
 		rows, err := db.QueryContext(ctx, query)
@@ -724,4 +724,38 @@ func foreignKeyAction(action string) string {
 	default:
 		return action
 	}
+}
+
+// firstSQLKeyword returns the first non-comment keyword in a SQL query,
+// skipping lines starting with -- and blocks wrapped in /* */.
+// Returns an empty string if no keyword is found.
+func firstSQLKeyword(query string) string {
+	inBlock := false
+	for _, line := range strings.Split(query, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if inBlock {
+			if idx := strings.Index(trimmed, "*/"); idx >= 0 {
+				inBlock = false
+				trimmed = strings.TrimSpace(trimmed[idx+2:])
+			} else {
+				continue
+			}
+		}
+		if strings.HasPrefix(trimmed, "/*") {
+			if idx := strings.Index(trimmed, "*/"); idx >= 0 {
+				trimmed = strings.TrimSpace(trimmed[idx+2:])
+			} else {
+				inBlock = true
+				continue
+			}
+		}
+		if strings.HasPrefix(trimmed, "--") || trimmed == "" {
+			continue
+		}
+		fields := strings.Fields(strings.ToUpper(trimmed))
+		if len(fields) > 0 {
+			return fields[0]
+		}
+	}
+	return ""
 }

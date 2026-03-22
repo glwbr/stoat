@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.12.0] - 2026-03-21
 
 ### Added
 
 - **Edit any cell in an external editor.** Press `e` on a focused table cell to open it in `$EDITOR` (falling back to `vim`). The editor is pre-populated with the current cell value. Saving and closing fires an UPDATE; quitting without changes is a no-op. JSON and JSONB values are automatically pretty-printed before opening and minified back on save.
+
+### Fixed
+
+- **SELECT queries starting with SQL comments not returning results on Postgres.** Queries opened via the external editor (or any query beginning with `--` or `/* */` comments) were incorrectly routed to the DML execution path, showing "rows affected" instead of displaying the result set.
 
 ## [0.11.0] - 2026-03-20
 
