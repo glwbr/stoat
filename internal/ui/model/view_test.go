@@ -7,6 +7,8 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/jxdones/stoat/internal/database"
 	"github.com/jxdones/stoat/internal/ui/components/table"
 )
 
@@ -635,6 +637,79 @@ func TestExpandedOptionsHeight(t *testing.T) {
 			got := expandedOptionsHeight(tt.width, tt.bindings)
 			if got != want {
 				t.Errorf("expandedOptionsHeight(%d, %v) = %d, want %d", tt.width, tt.bindings, got, want)
+			}
+		})
+	}
+}
+
+func TestFkViewportContent(t *testing.T) {
+	tests := []struct {
+		name         string
+		foreignKeys  []database.ForeignKey
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name:         "empty_foreign_keys_returns_empty_string",
+			foreignKeys:  []database.ForeignKey{},
+			wantContains: []string{},
+			wantAbsent:   []string{"→"},
+		},
+		{
+			name: "single_fk_no_actions",
+			foreignKeys: []database.ForeignKey{
+				{Column: "user_id", RefTable: "users", RefColumn: "id"},
+			},
+			wantContains: []string{"user_id", "→", "users", "id"},
+			wantAbsent:   []string{"on DELETE:", "on UPDATE:"},
+		},
+		{
+			name: "fk_with_on_delete_action",
+			foreignKeys: []database.ForeignKey{
+				{Column: "user_id", RefTable: "users", RefColumn: "id", OnDeleteAction: "CASCADE"},
+			},
+			wantContains: []string{"user_id", "→", "users", "id", "on DELETE:", "CASCADE"},
+			wantAbsent:   []string{"on UPDATE:"},
+		},
+		{
+			name: "fk_with_on_update_action",
+			foreignKeys: []database.ForeignKey{
+				{Column: "user_id", RefTable: "users", RefColumn: "id", OnUpdateAction: "SET NULL"},
+			},
+			wantContains: []string{"user_id", "→", "users", "id", "on UPDATE:", "SET NULL"},
+			wantAbsent:   []string{"on DELETE:"},
+		},
+		{
+			name: "fk_with_both_actions",
+			foreignKeys: []database.ForeignKey{
+				{Column: "org_id", RefTable: "orgs", RefColumn: "id", OnDeleteAction: "RESTRICT", OnUpdateAction: "CASCADE"},
+			},
+			wantContains: []string{"org_id", "→", "orgs", "id", "on DELETE:", "RESTRICT", "on UPDATE:", "CASCADE"},
+		},
+		{
+			name: "multiple_fks_all_present",
+			foreignKeys: []database.ForeignKey{
+				{Column: "user_id", RefTable: "users", RefColumn: "id"},
+				{Column: "org_id", RefTable: "orgs", RefColumn: "id"},
+			},
+			wantContains: []string{"user_id", "users", "org_id", "orgs"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New()
+			m.tableSchema.foreignKeys = tt.foreignKeys
+			got := ansi.Strip(m.fkViewportContent())
+			for _, sub := range tt.wantContains {
+				if !strings.Contains(got, sub) {
+					t.Errorf("fkViewportContent() should contain %q; got %q", sub, got)
+				}
+			}
+			for _, sub := range tt.wantAbsent {
+				if strings.Contains(got, sub) {
+					t.Errorf("fkViewportContent() should not contain %q; got %q", sub, got)
+				}
 			}
 		})
 	}

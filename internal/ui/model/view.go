@@ -383,6 +383,12 @@ func (m Model) renderSchemaPlaceholder(width, height int, msg string) string {
 
 // renderForeignKeys renders the foreign keys area of the UI layout.
 func (m Model) renderForeignKeys(width, height int) string {
+	return common.BorderedPane(width, height, m.isFocused(FocusTable), common.FocusBorder(m.isFocused(FocusTable))).
+		Render(m.fkViewport.View())
+}
+
+// fkViewportContent builds the styled string content for the foreign keys viewport.
+func (m Model) fkViewportContent() string {
 	content := []string{}
 	columnStyle := lipgloss.NewStyle().Foreground(theme.Current.TextAccent)
 	arrowStyle := lipgloss.NewStyle().Foreground(theme.Current.TextMuted)
@@ -418,14 +424,7 @@ func (m Model) renderForeignKeys(width, height int) string {
 		line += "\n"
 		content = append(content, line)
 	}
-	innerHeight := common.PaneInnerHeight(height)
-	lines := strings.Split(strings.Join(content, "\n"), "\n")
-	if len(lines) > innerHeight {
-		lines = lines[:innerHeight]
-	}
-	clipped := strings.Join(lines, "\n")
-	return common.BorderedPane(width, height, m.isFocused(FocusTable), common.FocusBorder(m.isFocused(FocusTable))).
-		Render(clipped)
+	return strings.Join(content, "\n")
 }
 
 // normalizeCanvas clips/pads content to an exact width x height rectangle.

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/jxdones/stoat/internal/config"
@@ -32,6 +33,7 @@ type screenState struct {
 	compact bool
 }
 
+// activeModal tracks the currently active modal.
 type activeModal int
 
 const (
@@ -48,6 +50,7 @@ const (
 	cellDetailScreenMargin = 4 // minimum gap between modal edge and screen edge
 )
 
+// tableSchema tracks the schema of the table.
 type tableSchema struct {
 	columns     []database.Column
 	constraints []database.Constraint
@@ -86,7 +89,8 @@ type Model struct {
 	cellDetail       celldetail.Model
 	paging           pagingState
 	savedQueries     []SavedQuery
-	unfilteredRows   []table.Row // rows before any filter is applied; always holds the current page from the DB
+	unfilteredRows   []table.Row    // rows before any filter is applied; always holds the current page from the DB
+	fkViewport       viewport.Model // viewport for displaying data from the Foreign Keys tab
 
 	// tablePKColumns are primary key column names for the table last loaded; used to build
 	// a safe WHERE clause when generating UPDATE from a cell. tablePKTarget identifies
@@ -227,6 +231,10 @@ func (m *Model) applyViewState() {
 		common.BoxInnerWidth(frame.columns.mainPane),
 		common.PaneInnerHeight(frame.main.table),
 	)
+
+	// set the size of the foreign key viewport
+	m.fkViewport.SetWidth(common.BoxInnerWidth(frame.columns.mainPane))
+	m.fkViewport.SetHeight(common.PaneInnerHeight(frame.main.table))
 
 	// target 2/3 of screen width, clamped to min/max bounds and screen margin
 	cdWidth := min(clampRange(m.view.width*2/3, cellDetailMinWidth, cellDetailMaxWidth), m.view.width-cellDetailScreenMargin)

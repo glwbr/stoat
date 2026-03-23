@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-03-23
+
+### Added
+
+- **Foreign Keys tab is now scrollable.** Previously, tables with more foreign keys than could fit on screen had them silently clipped. The tab now uses a viewport. You can scroll with `j`/`k` or arrow keys.
+
 ### Fixed
 
 - **Sidebar "Databases" label now reflects the correct terminology per driver.** Postgres connections show "Schemas" instead of "Databases", since stoat browses schemas within a single connected database. The label updates correctly when switching connections.

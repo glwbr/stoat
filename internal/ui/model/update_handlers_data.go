@@ -126,6 +126,8 @@ func (m Model) handleForeignKeysLoaded(msg ForeignKeysLoadedMsg) (tea.Model, tea
 	target := database.DatabaseTarget{Database: m.sidebar.EffectiveDB(), Table: m.sidebar.SelectedTable()}
 	if msg.Target == target {
 		m.tableSchema.foreignKeys = msg.ForeignKeys
+		m.fkViewport.SetContent(m.fkViewportContent())
+		m.fkViewport.GotoTop()
 	}
 	return m, nil
 }

@@ -75,14 +75,14 @@ curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.13.0
+curl -fsSL https://raw.githubusercontent.com/jxdones/stoat/main/install.sh | sh -s -- v0.13.1
 ```
 
 **Homebrew** (macOS):
 
 ```bash
 brew tap jxdones/stoat
-brew install stoat
+brew install --cask stoat
 ```
 
 **Go install:**

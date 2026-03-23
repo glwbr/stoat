@@ -34,15 +34,12 @@ archives:
 checksum:
   name_template: checksums.txt
 
-brews:
+homebrew_casks:
   - repository:
       owner: jxdones
       name: homebrew-stoat
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/jxdones/stoat"
-    description: "Terminal-native SQLite and PostgreSQL TUI client"
+    description: "The database client for people who don't leave the terminal."
     license: "MIT"
-    install: |
-      bin.install "stoat"
-    test: |
-      system "#{bin}/stoat", "--version"
+    binaries: [stoat]

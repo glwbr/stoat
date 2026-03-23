@@ -83,6 +83,11 @@ func (m Model) handleUpdateFocused(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.schemaTable = next
 			return m, cmd
 		}
+		if m.tabs.ActiveTab() == "Foreign Keys" {
+			next, cmd := m.fkViewport.Update(msg)
+			m.fkViewport = next
+			return m, cmd
+		}
 		next, cmd := m.table.Update(msg)
 		m.table = next
 		return m, cmd
